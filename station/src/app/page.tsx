@@ -72,46 +72,50 @@ export default function HomePage() {
   if (!mounted || session) return null;
 
   return (
-    <main className="flex min-h-screen items-center justify-center p-6">
-      <form onSubmit={handleAtivar} className="w-full max-w-sm space-y-4 rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
-        <h1 className="text-xl font-semibold">Ativar Estação de Balança</h1>
-        <p className="text-sm text-gray-500">
-          Peça ao administrador do tenant o código de ativação gerado em Configurações → Balança.
-        </p>
-
-        <div className="space-y-1">
-          <label className="text-sm font-medium">Código de ativação</label>
-          <input
-            className="w-full rounded border border-gray-300 px-3 py-2 uppercase tracking-widest"
-            value={activationCode}
-            onChange={(e) => setActivationCode(e.target.value)}
-            maxLength={8}
-            required
-          />
-        </div>
-
-        <div className="space-y-1">
-          <label className="text-sm font-medium">PIN da estação</label>
-          <input
-            type="password"
-            className="w-full rounded border border-gray-300 px-3 py-2"
-            value={pin}
-            onChange={(e) => setPin(e.target.value)}
-            minLength={4}
-            required
-          />
-        </div>
-
-        {erro && <p className="text-sm text-red-600">{erro}</p>}
-
-        <button
-          type="submit"
-          disabled={carregando}
-          className="w-full rounded bg-orange-600 py-2 font-medium text-white disabled:opacity-50"
-        >
-          {carregando ? "Ativando..." : "Ativar"}
-        </button>
-      </form>
+    <main className="flex min-h-screen items-center justify-center p-6 bg-muted/30">
+      <Card className="w-full max-w-sm">
+        <form onSubmit={handleAtivar}>
+          <CardHeader className="text-center">
+            <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-primary font-bold text-white shadow-lg text-xl">
+              T
+            </div>
+            <CardTitle className="text-2xl">Ativar Estação Tara</CardTitle>
+            <CardDescription>
+              Insira o código de ativação gerado no painel administrativo.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium">Código de ativação</label>
+              <Input
+                className="uppercase tracking-widest"
+                value={activationCode}
+                onChange={(e) => setActivationCode(e.target.value)}
+                maxLength={8}
+                required
+              />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium">PIN da estação</label>
+              <Input
+                type="password"
+                value={pin}
+                onChange={(e) => setPin(e.target.value)}
+                minLength={4}
+                required
+              />
+            </div>
+            {erro && <p className="text-sm font-medium text-destructive">{erro}</p>}
+            <Button
+              type="submit"
+              className="w-full"
+              disabled={carregando}
+            >
+              {carregando ? "Ativando..." : "Ativar estação"}
+            </Button>
+          </CardContent>
+        </form>
+      </Card>
     </main>
   );
 }

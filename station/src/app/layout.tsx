@@ -2,8 +2,8 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Balança | AgroSaaS",
-  description: "Estação de pesagem offline-first",
+  title: "Tara | AgroSaaS",
+  description: "Terminal de operação de pesagem offline-first",
   manifest: "/manifest.json",
 };
 

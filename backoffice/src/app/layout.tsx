@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Balança | Backoffice",
-  description: "Operação e administração da Plataforma Balança",
+  title: "Tara | Backoffice",
+  description: "Operação e administração da Plataforma Tara",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

@@ -24,6 +24,11 @@ import { startSyncLoop, runSyncCycle } from "@/lib/sync/trigger";
 import { usePesoAoVivo } from "@/lib/bridge/peso-ao-vivo";
 import { OperadorLogin } from "@/components/operador-login";
 import { downloadContingencyPackage } from "@/lib/contingency";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { PageHeader } from "@/components/shared/page-header";
+import { Activity, Gauge } from "lucide-react";
 
 type SubjectType = "VEICULO" | "ANIMAL";
 
@@ -266,313 +271,323 @@ export default function PesagemPage() {
   }
 
   return (
-    <main className="min-h-screen p-4">
-      <header className="mb-4 flex items-center justify-between">
-        <div>
-          <h1 className="text-lg font-semibold">{session.nome}</h1>
-          <p className="text-xs text-gray-500">
-            {operadorSessao.nome_exibicao} · Última sincronização:{" "}
-            {session.last_sync_at ? new Date(session.last_sync_at).toLocaleString("pt-BR") : "nunca"}
-          </p>
-        </div>
-        <div className="flex items-center gap-3">
-          <button className="text-xs text-gray-400 underline" onClick={() => clearOperadorSessao()}>
-            Trocar operador
-          </button>
-          {falhasSync ? (
-            <button
-              className="text-xs text-amber-700 underline"
+    <main className="min-h-screen p-6 max-w-6xl mx-auto space-y-6">
+      <PageHeader
+        title={session.nome}
+        description={`${operadorSessao.nome_exibicao} · Última sincronização: ${session.last_sync_at ? new Date(session.last_sync_at).toLocaleString("pt-BR") : "nunca"}`}
+        breadcrumbs={[{ label: "Operação" }]}
+        icon={<Activity className="size-6" />}
+        actions={
+          <>
+            <Button variant="ghost" size="sm" onClick={() => clearOperadorSessao()}>
+              Trocar operador
+            </Button>
+            {falhasSync ? (
+              <Button
+                variant="destructive" size="sm"
+                onClick={async () => {
+                  await retryFailedSync();
+                  void runSyncCycle();
+                }}
+              >
+                Reprocessar {falhasSync} falha(s)
+              </Button>
+            ) : null}
+            <Button
+              variant="outline" size="sm"
               onClick={async () => {
-                await retryFailedSync();
-                void runSyncCycle();
+                try {
+                  await downloadContingencyPackage();
+                  setMensagem("Pacote de contingência exportado para o pendrive.");
+                } catch (err) {
+                  setMensagem(err instanceof Error ? err.message : "Falha ao exportar contingência.");
+                }
               }}
             >
-              Reprocessar {falhasSync} falha(s)
-            </button>
-          ) : null}
-          <button
-            className="text-xs text-amber-700 underline"
-            onClick={async () => {
-              try {
-                await downloadContingencyPackage();
-                setMensagem("Pacote de contingência exportado para o pendrive.");
-              } catch (err) {
-                setMensagem(err instanceof Error ? err.message : "Falha ao exportar contingência.");
-              }
-            }}
-          >
-            Exportar contingência
-          </button>
-          <span className="flex items-center gap-1.5 text-xs text-gray-500">
-            <span
-              className={`size-2 rounded-full ${
-                session.bridge_url && leituraBalanca.conectado && !leituraBalanca.stale
-                  ? "bg-emerald-500"
-                  : "bg-gray-300"
-              }`}
-            />
-            {session.bridge_url
-              ? leituraBalanca.conectado && !leituraBalanca.stale
-                ? "Balança conectada"
-                : "Balança offline"
-              : "Sem ponte configurada"}
-          </span>
-          <button
-            className="text-xs text-gray-400 underline"
-            onClick={() => {
-              setBridgeUrlForm(session.bridge_url ?? "");
-              setBridgeTokenForm(session.bridge_token ?? "");
-              setConfigPonteAberta(true);
-            }}
-          >
-            Configurar ponte
-          </button>
-          <button
-            className="text-xs text-gray-400 underline"
-            onClick={async () => {
-              await clearSession();
-              router.replace("/");
-            }}
-          >
-            Desativar estação
-          </button>
-        </div>
-      </header>
+              Exportar contingência
+            </Button>
+            <div className="flex items-center gap-2 px-2 text-sm text-muted-foreground border-l border-r border-border mx-1">
+              <span
+                className={`size-2.5 rounded-full ${
+                  session.bridge_url && leituraBalanca.conectado && !leituraBalanca.stale
+                    ? "bg-secondary"
+                    : "bg-muted"
+                }`}
+              />
+              {session.bridge_url
+                ? leituraBalanca.conectado && !leituraBalanca.stale
+                  ? "Balança conectada"
+                  : "Balança offline"
+                : "Sem ponte configurada"}
+            </div>
+            <Button
+              variant="outline" size="sm"
+              onClick={() => {
+                setBridgeUrlForm(session.bridge_url ?? "");
+                setBridgeTokenForm(session.bridge_token ?? "");
+                setConfigPonteAberta(true);
+              }}
+            >
+              Configurar ponte
+            </Button>
+            <Button
+              variant="ghost" size="sm" className="text-destructive hover:text-destructive hover:bg-destructive/10"
+              onClick={async () => {
+                await clearSession();
+                router.replace("/");
+              }}
+            >
+              Desativar estação
+            </Button>
+          </>
+        }
+      />
 
       {configPonteAberta && (
-        <form
-          onSubmit={handleSalvarConfigPonte}
-          className="mb-4 space-y-3 rounded border border-gray-200 bg-white p-4 shadow-sm"
-        >
-          <h2 className="text-sm font-semibold">Ponte de hardware (leitura eletrônica)</h2>
-          <p className="text-xs text-gray-400">
-            Endereço do serviço balanca-platform/bridge rodando perto do indicador de peso.
-            Deixe em branco para usar só a digitação manual.
-          </p>
-          <div className="space-y-1">
-            <label className="text-xs font-medium">URL da ponte</label>
-            <input
-              className="w-full rounded border border-gray-300 px-3 py-2 text-sm"
-              placeholder="http://192.168.0.50:8321"
-              value={bridgeUrlForm}
-              onChange={(e) => setBridgeUrlForm(e.target.value)}
-            />
-          </div>
-          <div className="space-y-1">
-            <label className="text-xs font-medium">Token (opcional)</label>
-            <input
-              className="w-full rounded border border-gray-300 px-3 py-2 text-sm"
-              value={bridgeTokenForm}
-              onChange={(e) => setBridgeTokenForm(e.target.value)}
-            />
-          </div>
-          <div className="flex gap-2">
-            <button
-              type="button"
-              className="flex-1 rounded border border-gray-300 py-2 text-sm"
-              onClick={() => setConfigPonteAberta(false)}
-            >
-              Cancelar
-            </button>
-            <button type="submit" className="flex-1 rounded bg-orange-600 py-2 text-sm text-white">
-              Salvar
-            </button>
-          </div>
-        </form>
+        <Card className="shadow-sm">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base">Ponte de hardware (leitura eletrônica)</CardTitle>
+            <CardDescription>
+              Endereço do serviço balanca-platform/bridge rodando perto do indicador de peso.
+              Deixe em branco para usar só a digitação manual.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <form onSubmit={handleSalvarConfigPonte} className="space-y-4">
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium">URL da ponte</label>
+                <Input
+                  placeholder="http://192.168.0.50:8321"
+                  value={bridgeUrlForm}
+                  onChange={(e) => setBridgeUrlForm(e.target.value)}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium">Token (opcional)</label>
+                <Input
+                  value={bridgeTokenForm}
+                  onChange={(e) => setBridgeTokenForm(e.target.value)}
+                />
+              </div>
+              <div className="flex gap-3 pt-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="flex-1"
+                  onClick={() => setConfigPonteAberta(false)}
+                >
+                  Cancelar
+                </Button>
+                <Button type="submit" className="flex-1">
+                  Salvar
+                </Button>
+              </div>
+            </form>
+          </CardContent>
+        </Card>
       )}
 
       {mensagem && (
-        <div className="mb-4 flex items-center justify-between gap-3 rounded bg-green-50 p-2 text-sm text-green-700">
-          <p>{mensagem}</p>
+        <div className="flex items-center justify-between gap-3 rounded-md border border-secondary/30 bg-secondary/10 p-4 text-sm text-secondary-foreground shadow-sm">
+          <p className="font-medium">{mensagem}</p>
           {ticketOrdemId && (
-            <button
+            <Button
               type="button"
-              className="shrink-0 rounded bg-green-600 px-3 py-1.5 text-xs font-medium text-white disabled:opacity-50"
+              variant="secondary"
+              size="sm"
               disabled={baixandoTicket}
               onClick={() => handleBaixarTicket(ticketOrdemId)}
             >
               {baixandoTicket ? "Gerando..." : "Baixar ticket"}
-            </button>
+            </Button>
           )}
         </div>
       )}
 
       {!emCaptura ? (
-        <section className="space-y-4">
+        <section className="space-y-6">
           <div>
-            <h2 className="mb-2 text-sm font-medium text-gray-600">Ordens de pesagem pendentes</h2>
-            {ordens.length === 0 && <p className="text-sm text-gray-400">Nenhuma ordem pendente no momento.</p>}
-            <ul className="space-y-2">
+            <h2 className="mb-3 text-sm font-bold text-foreground/80 uppercase tracking-wider">Ordens de pesagem pendentes</h2>
+            {ordens.length === 0 && <p className="text-sm text-muted-foreground">Nenhuma ordem pendente no momento.</p>}
+            <ul className="space-y-3">
               {ordens.map((ordem: OrdemPendenteLocal) => (
                 <li key={ordem.id}>
                   <button
-                    className="w-full rounded border border-gray-200 bg-white p-3 text-left shadow-sm"
+                    className="w-full rounded-lg border border-border bg-card p-5 text-left shadow-sm hover:border-primary/50 transition-colors"
                     onClick={() => {
                       setTicketOrdemId(null);
                       setOrdemSelecionadaId(ordem.id);
                     }}
                   >
-                    <div className="flex justify-between text-sm font-medium">
+                    <div className="flex justify-between text-base font-semibold text-foreground">
                       <span>{ordem.origem_tipo}</span>
-                      <span className="text-gray-400">{ordem.subject_type}</span>
+                      <span className="text-muted-foreground text-sm font-normal">{ordem.subject_type}</span>
                     </div>
-                    <div className="text-xs text-gray-500">
+                    <div className="text-sm text-muted-foreground mt-1 mb-2">
                       {ordem.tipo_pesagem === "UNICA"
                         ? "Pesagem única"
                         : `Pesagem dupla (${ETAPAS_POR_TIPO_PESAGEM[ordem.tipo_pesagem].map((e) => ETAPA_LABEL[e]).join(" → ")})`}{" "}
-                      · {ordem.status}
+                      · <span className="text-secondary-foreground font-medium">{ordem.status}</span>
                     </div>
-                    {typeof ordem.contexto?.placa === "string" && (
-                      <div className="text-xs text-gray-400">Placa: {ordem.contexto.placa}</div>
-                    )}
-                    {typeof ordem.contexto?.numero_brinco === "string" && (
-                      <div className="text-xs text-gray-400">Brinco: {ordem.contexto.numero_brinco}</div>
-                    )}
-                    {ordem.numero_documento_fiscal && (
-                      <div className="text-xs text-gray-400">NF: {ordem.numero_documento_fiscal}</div>
-                    )}
+                    <div className="flex gap-4">
+                      {typeof ordem.contexto?.placa === "string" && (
+                        <div className="text-sm text-muted-foreground">Placa: <strong className="text-foreground">{ordem.contexto.placa}</strong></div>
+                      )}
+                      {typeof ordem.contexto?.numero_brinco === "string" && (
+                        <div className="text-sm text-muted-foreground">Brinco: <strong className="text-foreground">{ordem.contexto.numero_brinco}</strong></div>
+                      )}
+                      {ordem.numero_documento_fiscal && (
+                        <div className="text-sm text-muted-foreground">NF: <strong className="text-foreground">{ordem.numero_documento_fiscal}</strong></div>
+                      )}
+                    </div>
                   </button>
                 </li>
               ))}
             </ul>
           </div>
 
-          <div className="border-t border-gray-200 pt-4">
-            <p className="mb-2 text-xs text-gray-400">
+          <div className="border-t border-border pt-6 mt-6">
+            <p className="mb-3 text-sm text-muted-foreground">
               Sem ordem para esse veículo/animal? Pese assim mesmo — fica disponível para associar ao
               processo depois (tela de reconciliação no painel administrativo).
             </p>
-            <button
-              className="w-full rounded border border-dashed border-gray-300 py-3 text-sm font-medium text-gray-600"
+            <Button
+              variant="outline"
+              className="w-full h-14 border-dashed border-2 text-muted-foreground font-semibold hover:text-foreground hover:border-primary/50"
               onClick={() => setAvulsaConfig({ subject_type: "VEICULO" })}
             >
               Pesagem avulsa (sem ordem)
-            </button>
+            </Button>
           </div>
         </section>
       ) : (
         <>
           {avulsaConfig && (
-            <div className="mb-4 space-y-3 rounded border border-gray-200 bg-white p-4 shadow-sm">
-              <button type="button" className="text-xs text-gray-400 underline" onClick={voltarParaLista}>
-                ← Voltar
-              </button>
-              <h2 className="text-base font-semibold">Pesagem avulsa</h2>
-
-              <div className="space-y-1">
-                <label className="text-sm font-medium">O que está sendo pesado?</label>
-                <select
-                  className="w-full rounded border border-gray-300 px-3 py-2"
-                  value={avulsaConfig.subject_type}
-                  onChange={(e) => setAvulsaConfig({ subject_type: e.target.value as SubjectType })}
-                >
-                  <option value="VEICULO">Veículo / carga</option>
-                  <option value="ANIMAL">Animal</option>
-                </select>
-              </div>
-              <p className="text-xs text-gray-400">
-                Pesagem avulsa só suporta pesagem única — sem ordem prévia não é possível encadear
-                etapas (chegada/saída) offline.
-              </p>
-            </div>
+            <Card className="mb-6 shadow-sm border-primary/20 bg-primary/5">
+              <CardHeader className="pb-3">
+                <Button variant="ghost" size="sm" className="-ml-2 w-fit h-8 text-muted-foreground mb-2" onClick={voltarParaLista}>
+                  ← Voltar
+                </Button>
+                <CardTitle className="text-lg">Pesagem avulsa</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="space-y-1.5">
+                  <label className="text-sm font-semibold">O que está sendo pesado?</label>
+                  <select
+                    className="flex h-11 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                    value={avulsaConfig.subject_type}
+                    onChange={(e) => setAvulsaConfig({ subject_type: e.target.value as SubjectType })}
+                  >
+                    <option value="VEICULO">Veículo / carga</option>
+                    <option value="ANIMAL">Animal</option>
+                  </select>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Pesagem avulsa só suporta pesagem única — sem ordem prévia não é possível encadear
+                  etapas (chegada/saída) offline.
+                </p>
+              </CardContent>
+            </Card>
           )}
 
-          <form onSubmit={handleRegistrarPeso} className="space-y-4 rounded border border-gray-200 bg-white p-4 shadow-sm">
+          <form onSubmit={handleRegistrarPeso} className="space-y-6 rounded-xl border border-border bg-card p-6 shadow-sm relative">
             {!avulsaConfig && (
-              <button type="button" className="text-xs text-gray-400 underline" onClick={voltarParaLista}>
-                ← Voltar
-              </button>
+              <Button type="button" variant="ghost" size="sm" className="absolute top-4 right-4 text-muted-foreground" onClick={voltarParaLista}>
+                ✕ Cancelar
+              </Button>
             )}
             <div>
-              <h2 className="text-base font-semibold">
-                {etapaAtual ? ETAPA_LABEL[etapaAtual] : "Pesagem"} — {origemLabel}
+              <h2 className="text-2xl font-bold text-foreground">
+                {etapaAtual ? ETAPA_LABEL[etapaAtual] : "Pesagem"} — <span className="text-primary">{origemLabel}</span>
               </h2>
               {ordemSelecionada && (
-                <div className="mt-1 flex flex-wrap gap-x-3 text-xs text-gray-400">
-                  {ordemSelecionada.numero_documento_fiscal && <span>NF: {ordemSelecionada.numero_documento_fiscal}</span>}
+                <div className="mt-2 flex flex-wrap gap-x-4 gap-y-2 text-sm text-muted-foreground">
+                  {ordemSelecionada.numero_documento_fiscal && <span>NF: <strong className="text-foreground">{ordemSelecionada.numero_documento_fiscal}</strong></span>}
                   {ordemSelecionada.tipo_volume && (
                     <span>
-                      {ordemSelecionada.quantidade_volumes ?? "?"} × {ordemSelecionada.tipo_volume}
+                      <strong className="text-foreground">{ordemSelecionada.quantidade_volumes ?? "?"}</strong> × {ordemSelecionada.tipo_volume}
                     </span>
                   )}
                   {ordemSelecionada.data_agendada && (
-                    <span>Agendado: {new Date(ordemSelecionada.data_agendada).toLocaleString("pt-BR")}</span>
+                    <span>Agendado: <strong className="text-foreground">{new Date(ordemSelecionada.data_agendada).toLocaleString("pt-BR")}</strong></span>
                   )}
                 </div>
               )}
             </div>
 
             {session.bridge_url && (
-              <div className="rounded border border-dashed border-gray-300 p-3">
+              <div className="rounded-lg border-2 border-dashed border-border p-4 bg-muted/20">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-xs text-gray-400">Leitura ao vivo da balança</p>
-                    <p className="text-xl font-semibold tabular-nums">
+                    <p className="text-sm font-medium text-muted-foreground mb-1">Leitura ao vivo da balança</p>
+                    <p className="text-4xl font-bold tabular-nums text-foreground tracking-tight">
                       {leituraBalanca.peso_kg
                         ? `${Number(leituraBalanca.peso_kg).toLocaleString("pt-BR", { minimumFractionDigits: 3 })} kg`
                         : "—"}
                     </p>
                   </div>
-                  <button
+                  <Button
                     type="button"
+                    variant="default"
+                    size="lg"
                     disabled={!leituraBalanca.peso_kg || leituraBalanca.stale || !leituraBalanca.stable || !leituraBalanca.conectado}
                     onClick={handleUsarPesoDaBalanca}
-                    className="rounded bg-emerald-600 px-3 py-2 text-xs font-medium text-white disabled:opacity-40"
+                    className="font-bold text-base h-14 px-6 bg-secondary hover:bg-secondary/90 text-secondary-foreground"
                   >
                     Usar este peso
-                  </button>
+                  </Button>
                 </div>
                 {!leituraBalanca.conectado && (
-                  <p className="mt-1 text-xs text-red-500">Ponte offline — digite o peso manualmente.</p>
+                  <p className="mt-2 text-sm font-medium text-destructive">Ponte offline — digite o peso manualmente.</p>
                 )}
                 {leituraBalanca.conectado && leituraBalanca.stale && (
-                  <p className="mt-1 text-xs text-amber-600">Leitura antiga — aguardando atualização.</p>
+                  <p className="mt-2 text-sm font-medium text-amber-600">Leitura antiga — aguardando atualização.</p>
                 )}
                 {leituraBalanca.conectado && !leituraBalanca.stale && !leituraBalanca.stable && (
-                  <p className="mt-1 text-xs text-amber-600">Aguardando estabilização da leitura.</p>
+                  <p className="mt-2 text-sm font-medium text-amber-600">Aguardando estabilização da leitura...</p>
                 )}
               </div>
             )}
 
-            <div className="space-y-1">
-              <label className="text-sm font-medium">Peso aferido (kg)</label>
-              <input
+            <div className="space-y-2">
+              <label className="text-sm font-semibold">Peso aferido (kg)</label>
+              <Input
                 type="text"
                 inputMode="decimal"
-                className="w-full rounded border border-gray-300 px-3 py-3 text-2xl"
+                className="w-full h-16 text-3xl font-bold text-center tracking-wider bg-background border-2"
                 value={pesoAferido}
                 onChange={(e) => handlePesoAferidoDigitado(e.target.value)}
                 placeholder="0,000"
                 required
                 autoFocus
               />
-              <p className="text-xs text-gray-400">
+              <p className="text-xs text-muted-foreground text-center mt-2">
                 {capturedVia === "ELETRONICA"
                   ? "Preenchido pela leitura da balança — edite para digitar manualmente."
                   : "O que a balança efetivamente mediu."}
               </p>
             </div>
 
-            <div className="space-y-1">
-              <label className="text-sm font-medium">Peso informado (kg)</label>
-              <input
+            <div className="space-y-2 pt-4 border-t border-border">
+              <label className="text-sm font-semibold">Peso informado (kg)</label>
+              <Input
                 type="text"
                 inputMode="decimal"
-                className="w-full rounded border border-gray-300 px-3 py-2"
+                className="w-full h-12 text-xl"
                 value={pesoInformado}
                 onChange={(e) => setPesoInformado(e.target.value)}
                 placeholder="0,000"
               />
-              <p className="text-xs text-gray-400">
+              <p className="text-xs text-muted-foreground">
                 Valor declarado (nota fiscal/motorista) — só preencha se divergir do peso aferido.
               </p>
             </div>
 
             {subjectTypeAtivo === "VEICULO" && etapaAtual !== "SAIDA" && etapaAtual !== "POS_DESCARGA" && (
-              <div className="space-y-1">
-                <label className="text-sm font-medium">Placa</label>
-                <input
-                  className="w-full rounded border border-gray-300 px-3 py-2 uppercase"
+              <div className="space-y-2">
+                <label className="text-sm font-semibold">Placa</label>
+                <Input
+                  className="w-full h-12 uppercase text-lg"
                   value={placa}
                   onChange={(e) => setPlaca(e.target.value)}
                 />
@@ -580,39 +595,41 @@ export default function PesagemPage() {
             )}
 
             {subjectTypeAtivo === "ANIMAL" && (
-              <div className="space-y-1">
-                <label className="text-sm font-medium">Animal (brinco/SISBOV) *</label>
+              <div className="space-y-2">
+                <label className="text-sm font-semibold">Animal (brinco/SISBOV) <span className="text-destructive">*</span></label>
                 {animalSelecionado ? (
-                  <div className="flex items-center justify-between rounded border border-gray-300 bg-gray-50 px-3 py-2">
+                  <div className="flex items-center justify-between rounded-md border-2 border-primary/20 bg-primary/5 px-4 py-3">
                     <div>
-                      <p className="text-sm font-medium">
+                      <p className="text-lg font-bold text-foreground">
                         {animalSelecionado.numero_brinco || animalSelecionado.numero_sisbov || animalSelecionado.nome}
                       </p>
-                      <p className="text-xs text-gray-400">{animalSelecionado.categoria}</p>
+                      <p className="text-sm text-muted-foreground font-medium">{animalSelecionado.categoria}</p>
                     </div>
-                    <button
+                    <Button
                       type="button"
-                      className="text-xs text-gray-400 underline"
+                      variant="ghost"
+                      size="sm"
+                      className="text-muted-foreground"
                       onClick={() => {
                         setAnimalSelecionado(null);
                         setBuscaAnimal("");
                       }}
                     >
                       Trocar
-                    </button>
+                    </Button>
                   </div>
                 ) : (
                   <>
-                    <input
-                      className="w-full rounded border border-gray-300 px-3 py-2"
+                    <Input
+                      className="w-full h-12 text-base"
                       placeholder="Digite o brinco, SISBOV ou nome..."
                       value={buscaAnimal}
                       onChange={(e) => setBuscaAnimal(e.target.value)}
                     />
                     {buscaAnimal.trim() && (
-                      <ul className="divide-y divide-gray-100 rounded border border-gray-200">
+                      <ul className="divide-y divide-border rounded-md border border-border mt-2 shadow-sm max-h-64 overflow-y-auto">
                         {(animaisEncontrados ?? []).length === 0 && (
-                          <li className="p-2 text-xs text-gray-400">
+                          <li className="p-4 text-sm text-muted-foreground text-center">
                             Nenhum animal encontrado no cache local — sincronize a estação ou digite manualmente
                             via pesagem avulsa.
                           </li>
@@ -621,16 +638,16 @@ export default function PesagemPage() {
                           <li key={animal.id}>
                             <button
                               type="button"
-                              className="w-full p-2 text-left text-sm hover:bg-gray-50"
+                              className="w-full p-4 text-left hover:bg-muted/50 transition-colors"
                               onClick={() => {
                                 setAnimalSelecionado(animal);
                                 setBuscaAnimal("");
                               }}
                             >
-                              <span className="font-medium">
+                              <span className="font-bold text-base block text-foreground">
                                 {animal.numero_brinco || animal.numero_sisbov || animal.nome}
                               </span>{" "}
-                              <span className="text-xs text-gray-400">{animal.categoria}</span>
+                              <span className="text-sm text-muted-foreground font-medium block mt-1">{animal.categoria}</span>
                             </button>
                           </li>
                         ))}
@@ -641,13 +658,14 @@ export default function PesagemPage() {
               </div>
             )}
 
-            <button
+            <Button
               type="submit"
+              size="lg"
               disabled={salvando}
-              className="w-full rounded bg-orange-600 py-3 text-lg font-medium text-white disabled:opacity-50"
+              className="w-full h-16 text-xl font-bold shadow-md hover:shadow-lg transition-all"
             >
               {salvando ? "Salvando..." : "Confirmar pesagem"}
-            </button>
+            </Button>
           </form>
         </>
       )}

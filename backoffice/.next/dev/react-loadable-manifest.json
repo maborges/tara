@@ -1,1 +1,20 @@
-{}
+{
+  "../../node_modules/.pnpm/jspdf@4.2.1/node_modules/jspdf/dist/jspdf.es.min.js -> canvg": {
+    "id": "../../node_modules/.pnpm/jspdf@4.2.1/node_modules/jspdf/dist/jspdf.es.min.js -> canvg",
+    "files": [
+      "static/chunks/_app-pages-browser_node_modules_pnpm_canvg_3_0_11_node_modules_canvg_lib_index_es_js.js"
+    ]
+  },
+  "../../node_modules/.pnpm/jspdf@4.2.1/node_modules/jspdf/dist/jspdf.es.min.js -> dompurify": {
+    "id": "../../node_modules/.pnpm/jspdf@4.2.1/node_modules/jspdf/dist/jspdf.es.min.js -> dompurify",
+    "files": [
+      "static/chunks/_app-pages-browser_node_modules_pnpm_dompurify_3_4_14_node_modules_dompurify_dist_purify_es_mjs.js"
+    ]
+  },
+  "../../node_modules/.pnpm/jspdf@4.2.1/node_modules/jspdf/dist/jspdf.es.min.js -> html2canvas": {
+    "id": "../../node_modules/.pnpm/jspdf@4.2.1/node_modules/jspdf/dist/jspdf.es.min.js -> html2canvas",
+    "files": [
+      "static/chunks/_app-pages-browser_node_modules_pnpm_html2canvas_1_4_1_node_modules_html2canvas_dist_html2canvas_js.js"
+    ]
+  }
+}

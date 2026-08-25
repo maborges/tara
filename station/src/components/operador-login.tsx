@@ -3,7 +3,9 @@
 import { useEffect, useState } from "react";
 import { listarOperadoresAtivos, loginOperador, type OperadorAtivo, ApiError } from "@/lib/api";
 import { setOperadorSessao } from "@/lib/db";
-
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 interface OperadorLoginProps {
   deviceId: string;
   onLogin: () => void;
@@ -50,64 +52,75 @@ export function OperadorLogin({ deviceId, onLogin }: OperadorLoginProps) {
   if (operadorId) {
     const operador = operadores?.find((o) => o.id === operadorId);
     return (
-      <main className="flex min-h-screen items-center justify-center p-6">
-        <form onSubmit={handleLogin} className="w-full max-w-sm space-y-4 rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
-          <button type="button" className="text-xs text-gray-400 underline" onClick={() => setOperadorId(null)}>
-            ← Trocar operador
-          </button>
-          <h1 className="text-xl font-semibold">Olá, {operador?.nome_exibicao}</h1>
-          <p className="text-sm text-gray-500">Digite seu PIN pessoal para começar a pesar.</p>
-          <input
-            type="password"
-            inputMode="numeric"
-            autoFocus
-            className="w-full rounded border border-gray-300 px-3 py-3 text-2xl tracking-widest text-center"
-            value={pin}
-            onChange={(e) => setPin(e.target.value)}
-            placeholder="••••"
-            required
-          />
-          {erroLogin && <p className="text-sm text-red-600">{erroLogin}</p>}
-          <button
-            type="submit"
-            disabled={entrando || pin.length < 4}
-            className="w-full rounded bg-orange-600 py-3 text-lg font-medium text-white disabled:opacity-50"
-          >
-            {entrando ? "Entrando..." : "Entrar"}
-          </button>
-        </form>
+      <main className="flex min-h-screen items-center justify-center p-6 bg-muted/30">
+        <Card className="w-full max-w-sm">
+          <form onSubmit={handleLogin}>
+            <CardHeader>
+              <div className="mb-4">
+                <Button variant="ghost" size="sm" className="h-auto p-0 text-muted-foreground hover:text-foreground" onClick={() => setOperadorId(null)}>
+                  &larr; Trocar operador
+                </Button>
+              </div>
+              <CardTitle>Olá, {operador?.nome_exibicao}</CardTitle>
+              <CardDescription>Digite seu PIN pessoal para começar a pesar.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <Input
+                type="password"
+                inputMode="numeric"
+                autoFocus
+                className="text-center text-2xl tracking-widest py-6"
+                value={pin}
+                onChange={(e) => setPin(e.target.value)}
+                placeholder="••••"
+                required
+              />
+              {erroLogin && <p className="text-sm font-medium text-destructive">{erroLogin}</p>}
+              <Button
+                type="submit"
+                className="w-full py-6 text-lg"
+                disabled={entrando || pin.length < 4}
+              >
+                {entrando ? "Entrando..." : "Entrar"}
+              </Button>
+            </CardContent>
+          </form>
+        </Card>
       </main>
     );
   }
 
   return (
-    <main className="flex min-h-screen items-center justify-center p-6">
-      <div className="w-full max-w-sm space-y-4 rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
-        <h1 className="text-xl font-semibold">Quem está pesando?</h1>
-        <p className="text-sm text-gray-500">
-          Selecione seu nome. Se você não aparecer na lista, peça ao administrador para
-          cadastrá-lo em Balança → Operadores.
-        </p>
+    <main className="flex min-h-screen items-center justify-center p-6 bg-muted/30">
+      <Card className="w-full max-w-sm">
+        <CardHeader>
+          <CardTitle>Quem está pesando?</CardTitle>
+          <CardDescription>
+            Selecione seu nome. Se você não aparecer na lista, peça ao administrador para cadastrá-lo.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {erroLista && <p className="text-sm font-medium text-destructive">{erroLista}</p>}
+          {operadores === null && !erroLista && <p className="text-sm text-muted-foreground">Carregando...</p>}
+          {operadores?.length === 0 && (
+            <p className="text-sm text-muted-foreground">Nenhum operador cadastrado para esta fazenda ainda.</p>
+          )}
 
-        {erroLista && <p className="text-sm text-red-600">{erroLista}</p>}
-        {operadores === null && !erroLista && <p className="text-sm text-gray-400">Carregando...</p>}
-        {operadores?.length === 0 && (
-          <p className="text-sm text-gray-400">Nenhum operador cadastrado para esta fazenda ainda.</p>
-        )}
-
-        <ul className="space-y-2">
-          {operadores?.map((op) => (
-            <li key={op.id}>
-              <button
-                className="w-full rounded border border-gray-200 p-3 text-left text-sm font-medium hover:bg-gray-50"
-                onClick={() => setOperadorId(op.id)}
-              >
-                {op.nome_exibicao}
-              </button>
-            </li>
-          ))}
-        </ul>
-      </div>
+          <ul className="space-y-2">
+            {operadores?.map((op) => (
+              <li key={op.id}>
+                <Button
+                  variant="outline"
+                  className="w-full justify-start font-normal h-12"
+                  onClick={() => setOperadorId(op.id)}
+                >
+                  {op.nome_exibicao}
+                </Button>
+              </li>
+            ))}
+          </ul>
+        </CardContent>
+      </Card>
     </main>
   );
 }
