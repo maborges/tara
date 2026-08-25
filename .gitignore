@@ -4,11 +4,16 @@ service/**/*.pyc
 node_modules/
 station/node_modules/
 station/.next/
+backoffice/.next/
 station/dist/
+**/dist/
+*.tsbuildinfo
 station/tsconfig.tsbuildinfo
 bridge/.venv/
 bridge/__pycache__/
 bridge/**/*.pyc
+**/__pycache__/
+**/*.pyc
 *.env
 *.env.local
 !.env.example
