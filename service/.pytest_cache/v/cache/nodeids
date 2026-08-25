@@ -1,0 +1,4 @@
+[
+  "tests/test_contingency_import.py::test_import_contingency_is_signed_idempotent_and_tenant_scoped",
+  "tests/test_service_e2e.py::test_standalone_service_order_station_weighing_observer_flow"
+]

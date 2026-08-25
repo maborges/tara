@@ -1,0 +1,14 @@
+service/.venv/
+service/__pycache__/
+service/**/*.pyc
+node_modules/
+station/node_modules/
+station/.next/
+station/dist/
+station/tsconfig.tsbuildinfo
+bridge/.venv/
+bridge/__pycache__/
+bridge/**/*.pyc
+*.env
+*.env.local
+!.env.example

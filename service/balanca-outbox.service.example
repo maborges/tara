@@ -1,0 +1,15 @@
+[Unit]
+Description=AgroSaaS Balança Outbox
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+WorkingDirectory=/opt/balanca-platform/service
+EnvironmentFile=/opt/balanca-platform/service/.env
+ExecStart=/opt/balanca-platform/service/.venv/bin/python run_worker.py
+Restart=always
+RestartSec=5
+User=balanca
+
+[Install]
+WantedBy=multi-user.target

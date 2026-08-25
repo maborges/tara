@@ -1,0 +1,16 @@
+[Unit]
+Description=Balança Bridge
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=__INSTALL_DIR__
+ExecStart=__PYTHON__ -m balanca_bridge.main
+Environment=BALANCA_BRIDGE_CONFIG=__INSTALL_DIR__/config.yaml
+Restart=always
+RestartSec=3
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,14 @@
+{
+  "name": "balanca-platform",
+  "private": true,
+  "scripts": {
+    "station:dev": "pnpm --dir station dev",
+    "station:build": "pnpm --dir station build",
+    "station:typecheck": "pnpm --dir station typecheck",
+    "station:lint": "pnpm --dir station lint",
+    "backoffice:dev": "pnpm --dir backoffice dev",
+    "backoffice:build": "pnpm --dir backoffice build",
+    "backoffice:typecheck": "pnpm --dir backoffice typecheck",
+    "backoffice:lint": "pnpm --dir backoffice lint"
+  }
+}

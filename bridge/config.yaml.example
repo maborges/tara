@@ -1,0 +1,38 @@
+# Copie para config.yaml e ajuste para o indicador da sua balança.
+# Não é necessário saber a marca — os valores abaixo funcionam para a
+# maioria dos indicadores em modo "contínuo" (envio automático em ASCII).
+
+# SERIAL (RS232/USB) ou TCP (Ethernet nativo do indicador)
+connection_type: SERIAL
+
+serial:
+  port: /dev/ttyUSB0       # Windows: "COM3"
+  baudrate: 9600
+  bytesize: 8
+  parity: "N"               # N (nenhuma) | E (par) | O (ímpar)
+  stopbits: 1
+  timeout: 1.0
+
+tcp:
+  host: 192.168.0.50
+  port: 4001
+  timeout: 5.0
+  reconnect_seconds: 3.0
+
+protocol:
+  # Regex que extrai o primeiro número (com sinal/decimal) da linha recebida.
+  # Ajuste só se o indicador mandar múltiplos números na mesma linha e você
+  # precisar pegar um específico (ex.: peso bruto vs peso líquido).
+  weight_regex: '[-+]?\d+(?:[.,]\d+)?'
+  decimal_separator: "."    # "." (1234.500, mais comum no frame ASCII) ou "," (1.234,500)
+  unit: kg                  # kg | g | t — normalizado para kg internamente
+  scale_factor: 1.0         # multiplicador extra, se o indicador manda peso/10 etc.
+  line_terminator: "\r\n"
+
+http_host: 0.0.0.0
+http_port: 8321
+stale_after_seconds: 5.0
+
+# Token opcional para restringir quem consulta a ponte na rede local.
+# Deixe null se a LAN já é confiável/isolada (cenário mais comum).
+api_token: null

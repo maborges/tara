@@ -1,0 +1,5 @@
+packages:
+  - station
+  - backoffice
+ignoredBuiltDependencies:
+  - unrs-resolver
