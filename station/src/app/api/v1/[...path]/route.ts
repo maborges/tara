@@ -4,11 +4,11 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const backendUrl = getBackendOrigin();
-const standaloneService = Boolean(process.env.BALANCA_SERVICE_URL);
+const standaloneService = Boolean(process.env.TARA_SERVICE_URL);
 
 function getBackendOrigin() {
   const raw = (
-    process.env.BALANCA_SERVICE_URL ||
+    process.env.TARA_SERVICE_URL ||
     process.env.BACKEND_URL ||
     process.env.NEXT_PUBLIC_API_URL ||
     "http://127.0.0.1:8000"
@@ -66,11 +66,11 @@ async function proxy(request: NextRequest, ctx: { params: Promise<{ path: string
   // Isso permite rotacionar a credencial técnica sem interromper estações
   // ativas ou suas filas offline.
   if (standaloneService && path.join("/") === "balanca/devices/activate") {
-    headers.set("X-Balanca-Client-ID", process.env.BALANCA_SERVICE_CLIENT_ID || "");
-    headers.set("X-Balanca-Client-Secret", process.env.BALANCA_SERVICE_CLIENT_SECRET || "");
+    headers.set("X-Balanca-Client-ID", process.env.TARA_SERVICE_CLIENT_ID || "");
+    headers.set("X-Balanca-Client-Secret", process.env.TARA_SERVICE_CLIENT_SECRET || "");
   }
-  if (standaloneService && !headers.get("X-Tenant-ID") && process.env.BALANCA_TENANT_ID) {
-    headers.set("X-Tenant-ID", process.env.BALANCA_TENANT_ID);
+  if (standaloneService && !headers.get("X-Tenant-ID") && process.env.TARA_TENANT_ID) {
+    headers.set("X-Tenant-ID", process.env.TARA_TENANT_ID);
   }
 
   try {

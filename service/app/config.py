@@ -5,7 +5,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env", env_prefix="BALANCA_")
+    model_config = SettingsConfigDict(env_file=".env", env_prefix="TARA_")
 
     service_name: str = "balanca-service"
     environment: str = "development"
@@ -35,9 +35,9 @@ class Settings(BaseSettings):
     def validate_production_secrets(self):
         if self.environment == "production":
             if self.jwt_secret_secret.startswith("change-me") or len(self.jwt_secret_secret) < 32:
-                raise ValueError("BALANCA_JWT_SECRET_SECRET deve ser trocado em produção")
+                raise ValueError("TARA_JWT_SECRET_SECRET deve ser trocado em produção")
             if self.allow_legacy_api_key:
-                raise ValueError("BALANCA_ALLOW_LEGACY_API_KEY deve ser false em produção")
+                raise ValueError("TARA_ALLOW_LEGACY_API_KEY deve ser false em produção")
         return self
 
 

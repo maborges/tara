@@ -53,21 +53,21 @@ cp .env.example .env
 Configure no `.env`:
 
 ```env
-BALANCA_DATABASE_URL=postgresql+asyncpg://usuario:senha@servidor/banco
-BALANCA_ENVIRONMENT=production
-BALANCA_JWT_SECRET_SECRET=segredo-aleatorio-com-no-minimo-32-caracteres
-BALANCA_PORT=8010
+TARA_DATABASE_URL=postgresql+asyncpg://usuario:senha@servidor/banco
+TARA_ENVIRONMENT=production
+TARA_JWT_SECRET_SECRET=segredo-aleatorio-com-no-minimo-32-caracteres
+TARA__PORT=8010
 ```
 
 Aplique as migrations na ordem:
 
 ```bash
-psql --set=ON_ERROR_STOP=1 "$BALANCA_DATABASE_URL" -f migrations/000_platform_foundation.sql
-psql --set=ON_ERROR_STOP=1 "$BALANCA_DATABASE_URL" -f migrations/001_service_tables.sql
-psql --set=ON_ERROR_STOP=1 "$BALANCA_DATABASE_URL" -f migrations/002_security_identity.sql
-psql --set=ON_ERROR_STOP=1 "$BALANCA_DATABASE_URL" -f migrations/003_contingency.sql
-psql --set=ON_ERROR_STOP=1 "$BALANCA_DATABASE_URL" -f migrations/004_platform_admin.sql
-psql --set=ON_ERROR_STOP=1 "$BALANCA_DATABASE_URL" -f migrations/005_customer_portal.sql
+psql --set=ON_ERROR_STOP=1 "$TARA_DATABASE_URL" -f migrations/000_platform_foundation.sql
+psql --set=ON_ERROR_STOP=1 "$TARA_DATABASE_URL" -f migrations/001_service_tables.sql
+psql --set=ON_ERROR_STOP=1 "$TARA_DATABASE_URL" -f migrations/002_security_identity.sql
+psql --set=ON_ERROR_STOP=1 "$TARA_DATABASE_URL" -f migrations/003_contingency.sql
+psql --set=ON_ERROR_STOP=1 "$TARA_DATABASE_URL" -f migrations/004_platform_admin.sql
+psql --set=ON_ERROR_STOP=1 "$TARA_DATABASE_URL" -f migrations/005_customer_portal.sql
 ./start_server.sh
 ```
 
@@ -83,7 +83,7 @@ curl http://127.0.0.1:8010/readyz
 Crie o primeiro administrador:
 
 ```bash
-export BALANCA_BOOTSTRAP_TENANT_ID=UUID_DO_TENANT_OPERACIONAL
+export TARA_BOOTSTRAP_TENANT_ID=UUID_DO_TENANT_OPERACIONAL
 ./.venv/bin/python bootstrap_admin.py
 ```
 
@@ -134,10 +134,10 @@ pnpm run start
 Configure no `.env.local`:
 
 ```env
-BALANCA_SERVICE_URL=http://servidor-balanca:8010
-BALANCA_SERVICE_CLIENT_ID=client-id-da-estacao
-BALANCA_SERVICE_CLIENT_SECRET=segredo-da-estacao
-BALANCA_TENANT_ID=UUID_DO_TENANT
+TARA_SERVICE_URL=http://servidor-balanca:8010
+TARA_SERVICE_CLIENT_ID=client-id-da-estacao
+TARA_SERVICE_CLIENT_SECRET=segredo-da-estacao
+TARA_TENANT_ID=UUID_DO_TENANT
 ```
 
 As credenciais ficam no proxy Next.js e não devem usar `NEXT_PUBLIC_`.
@@ -159,7 +159,7 @@ cd /opt/lampp/htdocs/balanca-platform/bridge
 python3 -m venv .venv
 ./.venv/bin/pip install -r requirements.txt
 cp config.yaml.example config.yaml
-./.venv/bin/python -m balanca_bridge.main
+./.venv/bin/python -m TARA_bridge.main
 ```
 
 Configure a porta serial ou o host/porta TCP do indicador em `config.yaml`.
@@ -270,7 +270,7 @@ do serviço.
 6. Faça uma pesagem de teste.
 
 Se a conexão cair durante a atualização, a versão anterior em cache deve
-continuar disponível. Não desinstale a PWA nem apague `balanca_db` como
+continuar disponível. Não desinstale a PWA nem apague `TARA_db` como
 tentativa de correção.
 
 ## 15. Diagnóstico rápido

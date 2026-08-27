@@ -29,7 +29,7 @@ export const balancaEventEnvelopeSchema = z.object({
   event_type: z.string().min(1).max(120),
   event_version: z.literal("v1"),
   occurred_at: z.string().datetime(),
-  balanca_account_id: z.string().uuid(),
+  TARA_account_id: z.string().uuid(),
   client_system: z.string().min(1).max(80),
   client_tenant_id: z.string().min(1).max(120),
   correlation_id: z.string().min(1).max(160),
@@ -39,7 +39,7 @@ export const balancaEventEnvelopeSchema = z.object({
 });
 
 export const balancaOperatorLinkSchema = z.object({
-  operador_balanca_id: z.string().uuid(),
+  operador_TARA_id: z.string().uuid(),
   pessoa_cliente_id: z.string().uuid().nullable(),
 });
 

@@ -22,7 +22,7 @@ async def deliver(event: Outbox) -> None:
             stream.write(json.dumps(envelope, ensure_ascii=False, sort_keys=True) + "\n")
         return
     if not settings.outbox_target_url:
-        raise RuntimeError("Configure BALANCA_OUTBOX_TARGET_URL ou BALANCA_OUTBOX_FILE_PATH")
+        raise RuntimeError("Configure TARA_OUTBOX_TARGET_URL ou TARA_OUTBOX_FILE_PATH")
     headers = {"content-type": "application/json"}
     if settings.outbox_target_api_key:
         headers["authorization"] = f"Bearer {settings.outbox_target_api_key}"

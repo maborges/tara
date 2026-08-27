@@ -3,11 +3,11 @@ from __future__ import annotations
 import asyncio
 import logging
 
-from balanca_bridge.config import TcpConfig, ProtocolConfig
-from balanca_bridge.protocol_adapter import ProtocolAdapter, FrameParseError
-from balanca_bridge.state import LeituraState, Leitura
+from TARA_bridge.config import TcpConfig, ProtocolConfig
+from TARA_bridge.protocol_adapter import ProtocolAdapter, FrameParseError
+from TARA_bridge.state import LeituraState, Leitura
 
-logger = logging.getLogger("balanca_bridge.tcp")
+logger = logging.getLogger("TARA_bridge.tcp")
 
 
 async def run_tcp_reader(config: TcpConfig, protocol: ProtocolConfig, adapter: ProtocolAdapter, state: LeituraState) -> None:

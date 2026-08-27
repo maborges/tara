@@ -35,16 +35,16 @@ openssl rand -hex 32
 Configure o `.env`:
 
 ```env
-BALANCA_DATABASE_URL=postgresql+asyncpg://usuario:senha@servidor/farms
-BALANCA_ENVIRONMENT=production
-BALANCA_JWT_SECRET_SECRET=segredo-aleatorio-com-no-minimo-32-caracteres
-BALANCA_PORT=8010
-BALANCA_CORS_ORIGINS=["http://localhost:3004","http://127.0.0.1:3004"]
+TARA_DATABASE_URL=postgresql+asyncpg://usuario:senha@servidor/farms
+TARA_ENVIRONMENT=production
+TARA_JWT_SECRET_SECRET=segredo-aleatorio-com-no-minimo-32-caracteres
+TARA__PORT=8010
+TARA_CORS_ORIGINS=["http://localhost:3004","http://127.0.0.1:3004"]
 ```
 
-A base usada pela Plataforma é o banco PostgreSQL `farms`; `balanca` é o
+A base usada pela Plataforma é o banco PostgreSQL `farms`; `tara` é o
 schema próprio da Plataforma dentro desse banco. Não crie um banco separado
-chamado `balanca`. A URL `postgresql+asyncpg://` do `.env` é usada pela API;
+chamado `tara`. A URL `postgresql+asyncpg://` do `.env` é usada pela API;
 para o comando `psql`, informe host, usuário e banco separadamente:
 
 ```bash
@@ -76,7 +76,7 @@ curl http://127.0.0.1:8010/readyz
 Crie o primeiro administrador:
 
 ```bash
-export BALANCA_BOOTSTRAP_TENANT_ID=UUID_DO_TENANT_OPERACIONAL
+export TARA_BOOTSTRAP_TENANT_ID=UUID_DO_TENANT_OPERACIONAL
 ./.venv/bin/python bootstrap_admin.py
 ```
 
@@ -98,11 +98,11 @@ antes de iniciar o frontend:
 
 ```bash
 cd /opt/lampp/htdocs/balanca-platform
-NEXT_PUBLIC_BALANCA_API_URL=http://localhost:8011 pnpm backoffice:dev
+NEXT_PUBLIC_TARA_API_URL=http://localhost:8011 pnpm backoffice:dev
 ```
 
 Na tela inicial, informe o mesmo `UUID_DO_TENANT` usado em
-`BALANCA_BOOTSTRAP_TENANT_ID`, além do login e senha criados no passo anterior.
+`TARA_BOOTSTRAP_TENANT_ID`, além do login e senha criados no passo anterior.
 O dashboard consulta ordens, estações, operadores e outbox usando o JWT e o
 RBAC da API.
 
@@ -130,10 +130,10 @@ pnpm run start
 Configure no `.env.local`:
 
 ```env
-BALANCA_SERVICE_URL=http://servidor-balanca:8010
-BALANCA_SERVICE_CLIENT_ID=client-id-da-estacao
-BALANCA_SERVICE_CLIENT_SECRET=segredo-da-estacao
-BALANCA_TENANT_ID=UUID_DO_TENANT
+TARA_SERVICE_URL=http://servidor-balanca:8010
+TARA_SERVICE_CLIENT_ID=client-id-da-estacao
+TARA_SERVICE_CLIENT_SECRET=segredo-da-estacao
+TARA_TENANT_ID=UUID_DO_TENANT
 ```
 
 Abra a URL no navegador e instale a PWA. A primeira ativação normalmente
@@ -147,7 +147,7 @@ cd /opt/lampp/htdocs/balanca-platform/bridge
 python3 -m venv .venv
 ./.venv/bin/pip install -r requirements.txt
 cp config.yaml.example config.yaml
-./.venv/bin/python -m balanca_bridge.main
+./.venv/bin/python -m TARA_bridge.main
 ```
 
 Configure a porta serial ou host/porta TCP do indicador. Antes do turno,
@@ -172,7 +172,7 @@ A estação mantém operadores e ordens já sincronizados, grava pesagens no
 IndexedDB e conserva a fila local. Quando a conexão voltar, a sincronização
 será automática.
 
-Não apague o IndexedDB ou `balanca_db` enquanto houver pesagens pendentes.
+Não apague o IndexedDB ou `TARA_db` enquanto houver pesagens pendentes.
 
 ## 9. Contingência por pendrive
 

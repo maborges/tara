@@ -10,10 +10,10 @@ from app.service import bootstrap_admin
 
 
 async def main() -> None:
-    tenant_value = os.environ.get("BALANCA_BOOTSTRAP_TENANT_ID")
+    tenant_value = os.environ.get("TARA_BOOTSTRAP_TENANT_ID")
     if not tenant_value:
         raise RuntimeError(
-            "BALANCA_BOOTSTRAP_TENANT_ID é necessário para vincular o "
+            "TARA_BOOTSTRAP_TENANT_ID é necessário para vincular o "
             "administrador às operações iniciais da conta"
         )
     tenant_id = uuid.UUID(tenant_value)

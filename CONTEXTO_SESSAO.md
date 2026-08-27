@@ -25,12 +25,12 @@ internos da Balança nem acessar o banco dela.
   - Romaneios de colheita;
   - Pecuária;
 - configuração adicionada:
-  - `BALANCA_SERVICE_URL`;
-  - `BALANCA_SERVICE_CLIENT_ID`;
-  - `BALANCA_SERVICE_CLIENT_SECRET`;
+  - `TARA_SERVICE_URL`;
+  - `TARA_SERVICE_CLIENT_ID`;
+  - `TARA_SERVICE_CLIENT_SECRET`;
 - contratos locais em `services/api/integracoes/balanca/`;
 - documentação principal em `farm/docs/MANUAL_BALANCA.md` e
-  `farm/docs/IMPLANTACAO_BALANCA_CLIENTE.md`.
+  `farm/docs/IMPLANTACAO_TARA_CLIENTE.md`.
 
 ## Correção mais recente
 
@@ -56,7 +56,7 @@ No AgroSaaS:
 
 ```bash
 cd /opt/lampp/htdocs/farm/services/api
-PYTHONPATH=. .venv/bin/pytest -q tests/unit/integracoes/test_balanca_contracts.py
+PYTHONPATH=. .venv/bin/pytest -q tests/unit/integracoes/test_TARA_contracts.py
 ```
 
 Resultado atual: 3 testes passando. Também passaram `compileall` dos arquivos

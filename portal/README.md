@@ -27,7 +27,7 @@ Acesse `http://localhost:3005`.
 Para outra URL da API:
 
 ```bash
-NEXT_PUBLIC_BALANCA_API_URL=http://localhost:8011 pnpm portal:dev
+NEXT_PUBLIC_TARA_API_URL=http://localhost:8011 pnpm portal:dev
 ```
 
 ## Limites do MVP

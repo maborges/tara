@@ -109,7 +109,7 @@ e integração; isso deve permanecer fora do contrato novo de entrega.
   exige `X-Tenant-ID` e consulta `(tenant_id, token_hash)`.
 - A contingência é recuperação de dados de pesagem, não provisionamento offline
   inicial de uma Station.
-- O worker atual funciona para um único `BALANCA_OUTBOX_TENANT_ID` e um único
+- O worker atual funciona para um único `TARA_OUTBOX_TENANT_ID` e um único
   alvo URL/arquivo configurado; não é ainda um roteador multi-conta com estado
   de confirmação por consumidor.
 - A observabilidade existente cobre backlog do Outbox, mas não as métricas de
@@ -134,7 +134,7 @@ e integração; isso deve permanecer fora do contrato novo de entrega.
 ### Legado ou inconsistência
 
 - `POST /v1/auth/login` exige `X-Tenant-ID`; o bootstrap exige
-  `BALANCA_BOOTSTRAP_TENANT_ID`. Isso contradiz o Backoffice Global sem tenant
+  `TARA_BOOTSTRAP_TENANT_ID`. Isso contradiz o Backoffice Global sem tenant
   documentado em `CONTEXTO_IA_PLATAFORMA_BALANCA.md`.
 - `require_backoffice`, `require_client_context` e `require_station` exigem
   `X-Tenant-ID`; o cliente pode enviar um tenant arbitrário como parte da

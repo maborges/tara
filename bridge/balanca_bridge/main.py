@@ -8,16 +8,16 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 
-from balanca_bridge.config import BridgeConfig, load_config
-from balanca_bridge.protocol_adapter import ProtocolAdapter
-from balanca_bridge.serial_reader import run_serial_reader
-from balanca_bridge.tcp_reader import run_tcp_reader
-from balanca_bridge.state import LeituraState
+from TARA_bridge.config import BridgeConfig, load_config
+from TARA_bridge.protocol_adapter import ProtocolAdapter
+from TARA_bridge.serial_reader import run_serial_reader
+from TARA_bridge.tcp_reader import run_tcp_reader
+from TARA_bridge.state import LeituraState
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
-logger = logging.getLogger("balanca_bridge")
+logger = logging.getLogger("TARA_bridge")
 
-CONFIG_PATH = os.environ.get("BALANCA_BRIDGE_CONFIG", "config.yaml")
+CONFIG_PATH = os.environ.get("TARA_BRIDGE_CONFIG", "config.yaml")
 
 
 def _check_token(request: Request, config: BridgeConfig) -> None:
@@ -117,7 +117,7 @@ def run() -> None:
     import uvicorn
 
     config = load_config(CONFIG_PATH)
-    uvicorn.run("balanca_bridge.main:app", host=config.http_host, port=config.http_port)
+    uvicorn.run("TARA_bridge.main:app", host=config.http_host, port=config.http_port)
 
 
 if __name__ == "__main__":

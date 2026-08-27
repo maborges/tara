@@ -138,7 +138,7 @@ class BalancaDB extends Dexie {
   contingency_state!: EntityTable<ContingencyStateRow, "id">;
 
   constructor() {
-    super("balanca_db");
+    super("TARA_db");
     this.version(1).stores({
       ordens: "id, status, origem_tipo, subject_type",
       pesagens: "local_id, ordem_id, server_id, synced",

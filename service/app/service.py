@@ -553,7 +553,7 @@ async def complete_weighing(session: AsyncSession, tenant_id: uuid.UUID, data) -
         "event_type": "balanca.pesagem.concluida.v1",
         "event_version": "v1",
         "occurred_at": weight.captured_at.isoformat(),
-        "balanca_account_id": str(account.id),
+        "TARA_account_id": str(account.id),
         "client_system": order.sistema_cliente,
         "client_tenant_id": order.tenant_cliente_id,
         "correlation_id": order.correlation_id,

@@ -8,10 +8,10 @@ import pytest
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
 os.environ.setdefault(
-    "BALANCA_DATABASE_URL",
+    "TARA_DATABASE_URL",
     "postgresql+asyncpg://borgus:numsey01@192.168.0.2/farms",
 )
-os.environ.setdefault("BALANCA_API_KEY", "service-test")
+os.environ.setdefault("TARA_API_KEY", "service-test")
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from app.db import _engine, set_tenant_context

@@ -5,11 +5,11 @@ import logging
 
 import serial
 
-from balanca_bridge.config import SerialConfig
-from balanca_bridge.protocol_adapter import ProtocolAdapter, FrameParseError
-from balanca_bridge.state import LeituraState, Leitura
+from TARA_bridge.config import SerialConfig
+from TARA_bridge.protocol_adapter import ProtocolAdapter, FrameParseError
+from TARA_bridge.state import LeituraState, Leitura
 
-logger = logging.getLogger("balanca_bridge.serial")
+logger = logging.getLogger("TARA_bridge.serial")
 
 
 async def run_serial_reader(config: SerialConfig, adapter: ProtocolAdapter, state: LeituraState) -> None:

@@ -18,12 +18,12 @@ Comandos:
     python3 -m venv .venv
     ./.venv/bin/pip install -r requirements.txt
     cp .env.example .env
-    psql --set=ON_ERROR_STOP=1 "$BALANCA_DATABASE_URL" -f migrations/000_platform_foundation.sql
-    psql --set=ON_ERROR_STOP=1 "$BALANCA_DATABASE_URL" -f migrations/001_service_tables.sql
-    psql --set=ON_ERROR_STOP=1 "$BALANCA_DATABASE_URL" -f migrations/002_security_identity.sql
-    psql --set=ON_ERROR_STOP=1 "$BALANCA_DATABASE_URL" -f migrations/003_contingency.sql
-    psql --set=ON_ERROR_STOP=1 "$BALANCA_DATABASE_URL" -f migrations/004_platform_admin.sql
-    psql --set=ON_ERROR_STOP=1 "$BALANCA_DATABASE_URL" -f migrations/005_customer_portal.sql
+    psql --set=ON_ERROR_STOP=1 "$TARA_DATABASE_URL" -f migrations/000_platform_foundation.sql
+    psql --set=ON_ERROR_STOP=1 "$TARA_DATABASE_URL" -f migrations/001_service_tables.sql
+    psql --set=ON_ERROR_STOP=1 "$TARA_DATABASE_URL" -f migrations/002_security_identity.sql
+    psql --set=ON_ERROR_STOP=1 "$TARA_DATABASE_URL" -f migrations/003_contingency.sql
+    psql --set=ON_ERROR_STOP=1 "$TARA_DATABASE_URL" -f migrations/004_platform_admin.sql
+    psql --set=ON_ERROR_STOP=1 "$TARA_DATABASE_URL" -f migrations/005_customer_portal.sql
     ./start_server.sh
 
 Endpoints:
@@ -51,7 +51,7 @@ JSONL, com retry e idempotência.
 
 Depois de aplicar as migrations, crie o primeiro administrador fora da API:
 
-    export BALANCA_BOOTSTRAP_TENANT_ID=UUID_DO_TENANT_OPERACIONAL
+    export TARA_BOOTSTRAP_TENANT_ID=UUID_DO_TENANT_OPERACIONAL
     ./.venv/bin/python bootstrap_admin.py
 
 O usuário acessa POST /v1/auth/login somente com login e senha. A resposta
@@ -95,7 +95,7 @@ Também é possível usar o utilitário operacional:
 
 O serviço valida assinatura, tenant, estação, identidade, sequência e
 idempotência. O lote bruto e o resultado de cada item ficam registrados em
-`balanca.contingencia_lotes` e `balanca.contingencia_itens`. Os estados são
+`tara.contingencia_lotes` e `tara.contingencia_itens`. Os estados são
 `IMPORTADO`, `PARCIAL` ou `REJEITADO`; repetir o mesmo pacote não duplica dados.
 Pesagens sem ordem prévia geram uma ordem sombra de contingência para posterior
 conciliação com o sistema consumidor.

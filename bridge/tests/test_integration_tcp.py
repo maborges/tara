@@ -9,10 +9,10 @@ from decimal import Decimal
 import pytest
 from httpx import ASGITransport, AsyncClient
 
-from balanca_bridge.config import BridgeConfig, TcpConfig
-from balanca_bridge.protocol_adapter import ProtocolAdapter
-from balanca_bridge.state import LeituraState
-from balanca_bridge.tcp_reader import run_tcp_reader
+from TARA_bridge.config import BridgeConfig, TcpConfig
+from TARA_bridge.protocol_adapter import ProtocolAdapter
+from TARA_bridge.state import LeituraState
+from TARA_bridge.tcp_reader import run_tcp_reader
 
 
 async def _fake_indicador(reader, writer, peso_kg: float):
@@ -70,7 +70,7 @@ async def test_tcp_reader_atualiza_estado_a_partir_de_indicador_fake():
 
 @pytest.mark.asyncio
 async def test_endpoint_peso_atual_sem_leitura_retorna_stale():
-    from balanca_bridge.main import app
+    from TARA_bridge.main import app
 
     app.state.config = BridgeConfig()
     app.state.leitura_state = LeituraState()
@@ -86,7 +86,7 @@ async def test_endpoint_peso_atual_sem_leitura_retorna_stale():
 
 @pytest.mark.asyncio
 async def test_endpoint_peso_atual_com_token_invalido_retorna_401():
-    from balanca_bridge.main import app
+    from TARA_bridge.main import app
 
     app.state.config = BridgeConfig(api_token="segredo123")
     app.state.leitura_state = LeituraState()

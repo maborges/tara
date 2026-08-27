@@ -73,7 +73,7 @@ pnpm portal:dev
 ```
 
 A aplicação fica em `http://localhost:3005` e a API deve incluir essa origem
-em `BALANCA_CORS_ORIGINS`.
+em `TARA_CORS_ORIGINS`.
 
 ## Validações
 

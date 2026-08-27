@@ -54,7 +54,7 @@ def issue_backoffice_token(user: Usuario, permissions: set[str]) -> str:
     payload = {
         "sub": str(user.id),
         "tenant_id": str(user.tenant_id),
-        "type": "balanca_backoffice",
+        "type": "TARA_backoffice",
         "permissions": sorted(permissions),
         "iat": int(now.timestamp()),
         "exp": int((now + timedelta(minutes=settings.jwt_access_minutes)).timestamp()),
@@ -70,7 +70,7 @@ def issue_portal_token(user: PortalUser) -> str:
         "sub": str(user.id),
         "tenant_id": str(user.tenant_id),
         "account_id": str(user.conta_id),
-        "type": "balanca_portal",
+        "type": "TARA__PORTal",
         "role": user.role,
         "iat": int(now.timestamp()),
         "exp": int((now + timedelta(minutes=settings.jwt_access_minutes)).timestamp()),
@@ -88,7 +88,7 @@ def _decode_backoffice_token(token: str) -> dict:
         )
     except JWTError as exc:
         raise HTTPException(status_code=401, detail="Token do backoffice inválido ou expirado") from exc
-    if payload.get("type") != "balanca_backoffice":
+    if payload.get("type") != "TARA_backoffice":
         raise HTTPException(status_code=401, detail="Token não é do backoffice da Balança")
     return payload
 
@@ -102,7 +102,7 @@ def _decode_portal_token(token: str) -> dict:
         )
     except JWTError as exc:
         raise HTTPException(status_code=401, detail="Token do portal inválido ou expirado") from exc
-    if payload.get("type") != "balanca_portal":
+    if payload.get("type") != "TARA__PORTal":
         raise HTTPException(status_code=401, detail="Token não é do Portal do Cliente")
     return payload
 

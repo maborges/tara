@@ -31,7 +31,7 @@ Administrador global
 Backoffice Administrativo Global
         ↓
 Serviço/API Balança
-        ├── PostgreSQL farms, schema balanca
+        ├── PostgreSQL farms, schema tara
         ├── APIs para clientes consumidores
         ├── APIs para estações
         └── Outbox/worker de eventos
@@ -174,13 +174,13 @@ O banco correto é:
 
 ```text
 PostgreSQL database: farms
-PostgreSQL schema: balanca
+PostgreSQL schema: tara
 ```
 
 Não criar um banco separado chamado `balanca`.
 
 As migrations de `service/migrations/` criam tabelas próprias no schema
-`balanca`, incluindo contas, clientes, api_clients, usuários, papéis,
+`tara`, incluindo contas, clientes, api_clients, usuários, papéis,
 permissões, estações, operadores, ordens, pesagens, outbox e contingência.
 
 O AgroSaaS usa o schema `farms` e não deve compartilhar tabelas, modelos ou
@@ -201,10 +201,10 @@ Backoffice sem Tenant ID
 ```
 
 O bootstrap deve ser local e protegido, não um endpoint público. A identidade
-de entrada é criada em `balanca.administradores_plataforma`; o vínculo com um
+de entrada é criada em `tara.administradores_plataforma`; o vínculo com um
 tenant operacional inicial é mantido temporariamente para as telas legadas de
 operação. O script `service/bootstrap_admin.py` exige
-`BALANCA_BOOTSTRAP_TENANT_ID` apenas no bootstrap, não no login.
+`TARA_BOOTSTRAP_TENANT_ID` apenas no bootstrap, não no login.
 
 ## 7. Fluxo administrativo
 
@@ -369,7 +369,7 @@ duplicidade e registros individuais.
 ## 14. Inconsistências conhecidas
 
 1. O login do Backoffice ainda é tenant-scoped, mas deve ser global.
-2. O bootstrap atual exige `BALANCA_BOOTSTRAP_TENANT_ID`.
+2. O bootstrap atual exige `TARA_BOOTSTRAP_TENANT_ID`.
 3. Ainda não existe administrador global persistido.
 4. A ativação da estação tem diferenças entre PWA e serviço independente:
    `device_token/device_id` versus `station_token/station_id`.
@@ -401,7 +401,7 @@ duplicidade e registros individuais.
 - Backoffice possui telas de credenciais, estações, operadores, ordens e
   eventos;
 - typecheck, lint e build do Backoffice passam no estado validado;
-- serviço possui migrations para `farms.balanca`;
+- serviço possui migrations para `farms.tara`;
 - Bridge possui testes de protocolo e TCP;
 - serviço possui testes E2E e de contingência, mas o ambiente virtual pode
   não ter `pytest` instalado;

@@ -16,8 +16,8 @@ class Base(DeclarativeBase):
 class Usuario(Base):
     __tablename__ = "usuarios"
     __table_args__ = (
-        UniqueConstraint("tenant_id", "login", name="uq_balanca_usuarios_login"),
-        {"schema": "balanca"},
+        UniqueConstraint("tenant_id", "login", name="uq_TARA_usuarios_login"),
+        {"schema": "tara"},
     )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
@@ -33,14 +33,14 @@ class Usuario(Base):
 class AdministradorPlataforma(Base):
     __tablename__ = "administradores_plataforma"
     __table_args__ = (
-        UniqueConstraint("login", name="uq_balanca_platform_admin_login"),
-        UniqueConstraint("usuario_id", name="uq_balanca_platform_admin_usuario"),
-        {"schema": "balanca"},
+        UniqueConstraint("login", name="uq_TARA_platform_admin_login"),
+        UniqueConstraint("usuario_id", name="uq_TARA_platform_admin_usuario"),
+        {"schema": "tara"},
     )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
     usuario_id: Mapped[uuid.UUID] = mapped_column(
-        ForeignKey("balanca.usuarios.id", ondelete="CASCADE"), nullable=False
+        ForeignKey("tara.usuarios.id", ondelete="CASCADE"), nullable=False
     )
     tenant_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
     login: Mapped[str] = mapped_column(String(120), nullable=False)
@@ -54,8 +54,8 @@ class AdministradorPlataforma(Base):
 class Papel(Base):
     __tablename__ = "papeis"
     __table_args__ = (
-        UniqueConstraint("tenant_id", "codigo", name="uq_balanca_papeis_codigo"),
-        {"schema": "balanca"},
+        UniqueConstraint("tenant_id", "codigo", name="uq_TARA_papeis_codigo"),
+        {"schema": "tara"},
     )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
@@ -68,8 +68,8 @@ class Papel(Base):
 class Permissao(Base):
     __tablename__ = "permissoes"
     __table_args__ = (
-        UniqueConstraint("tenant_id", "codigo", name="uq_balanca_permissoes_codigo"),
-        {"schema": "balanca"},
+        UniqueConstraint("tenant_id", "codigo", name="uq_TARA_permissoes_codigo"),
+        {"schema": "tara"},
     )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
@@ -81,38 +81,38 @@ class Permissao(Base):
 class UsuarioPapel(Base):
     __tablename__ = "usuario_papeis"
     __table_args__ = (
-        UniqueConstraint("usuario_id", "papel_id", name="uq_balanca_usuario_papel"),
-        {"schema": "balanca"},
+        UniqueConstraint("usuario_id", "papel_id", name="uq_TARA_usuario_papel"),
+        {"schema": "tara"},
     )
 
     usuario_id: Mapped[uuid.UUID] = mapped_column(
-        ForeignKey("balanca.usuarios.id", ondelete="CASCADE"), primary_key=True
+        ForeignKey("tara.usuarios.id", ondelete="CASCADE"), primary_key=True
     )
     papel_id: Mapped[uuid.UUID] = mapped_column(
-        ForeignKey("balanca.papeis.id", ondelete="CASCADE"), primary_key=True
+        ForeignKey("tara.papeis.id", ondelete="CASCADE"), primary_key=True
     )
 
 
 class PapelPermissao(Base):
     __tablename__ = "papel_permissoes"
     __table_args__ = (
-        UniqueConstraint("papel_id", "permissao_id", name="uq_balanca_papel_permissao"),
-        {"schema": "balanca"},
+        UniqueConstraint("papel_id", "permissao_id", name="uq_TARA_papel_permissao"),
+        {"schema": "tara"},
     )
 
     papel_id: Mapped[uuid.UUID] = mapped_column(
-        ForeignKey("balanca.papeis.id", ondelete="CASCADE"), primary_key=True
+        ForeignKey("tara.papeis.id", ondelete="CASCADE"), primary_key=True
     )
     permissao_id: Mapped[uuid.UUID] = mapped_column(
-        ForeignKey("balanca.permissoes.id", ondelete="CASCADE"), primary_key=True
+        ForeignKey("tara.permissoes.id", ondelete="CASCADE"), primary_key=True
     )
 
 
 class ApiClient(Base):
     __tablename__ = "api_clients"
     __table_args__ = (
-        UniqueConstraint("client_id", name="uq_balanca_api_clients_client_id"),
-        {"schema": "balanca"},
+        UniqueConstraint("client_id", name="uq_TARA_api_clients_client_id"),
+        {"schema": "tara"},
     )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
@@ -130,12 +130,12 @@ class ApiClient(Base):
 class ApiClientSecret(Base):
     __tablename__ = "api_client_secrets"
     __table_args__ = (
-        UniqueConstraint("api_client_id", "version", name="uq_balanca_api_client_secret_version"),
-        {"schema": "balanca"},
+        UniqueConstraint("api_client_id", "version", name="uq_TARA_api_client_secret_version"),
+        {"schema": "tara"},
     )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
-    api_client_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("balanca.api_clients.id", ondelete="CASCADE"), nullable=False)
+    api_client_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("tara.api_clients.id", ondelete="CASCADE"), nullable=False)
     tenant_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
     version: Mapped[int] = mapped_column(Integer, nullable=False)
     secret_hash: Mapped[str] = mapped_column(String(64), nullable=False)
@@ -147,7 +147,7 @@ class ApiClientSecret(Base):
 
 class Conta(Base):
     __tablename__ = "contas"
-    __table_args__ = {"schema": "balanca"}
+    __table_args__ = {"schema": "tara"}
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
     tenant_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False, unique=True)
@@ -158,17 +158,17 @@ class Conta(Base):
 class PortalUser(Base):
     __tablename__ = "portal_users"
     __table_args__ = (
-        UniqueConstraint("email", name="uq_balanca_portal_user_email"),
-        UniqueConstraint("usuario_id", name="uq_balanca_portal_user_usuario"),
-        {"schema": "balanca"},
+        UniqueConstraint("email", name="uq_TARA__PORTal_user_email"),
+        UniqueConstraint("usuario_id", name="uq_TARA__PORTal_user_usuario"),
+        {"schema": "tara"},
     )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
     usuario_id: Mapped[uuid.UUID | None] = mapped_column(
-        ForeignKey("balanca.usuarios.id", ondelete="SET NULL"), nullable=True
+        ForeignKey("tara.usuarios.id", ondelete="SET NULL"), nullable=True
     )
     conta_id: Mapped[uuid.UUID] = mapped_column(
-        ForeignKey("balanca.contas.id", ondelete="CASCADE"), nullable=False
+        ForeignKey("tara.contas.id", ondelete="CASCADE"), nullable=False
     )
     tenant_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
     email: Mapped[str] = mapped_column(String(255), nullable=False)
@@ -184,13 +184,13 @@ class PortalUser(Base):
 class PortalToken(Base):
     __tablename__ = "portal_tokens"
     __table_args__ = (
-        UniqueConstraint("token_hash", name="uq_balanca_portal_token_hash"),
-        {"schema": "balanca"},
+        UniqueConstraint("token_hash", name="uq_TARA__PORTal_token_hash"),
+        {"schema": "tara"},
     )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
     portal_user_id: Mapped[uuid.UUID] = mapped_column(
-        ForeignKey("balanca.portal_users.id", ondelete="CASCADE"), nullable=False
+        ForeignKey("tara.portal_users.id", ondelete="CASCADE"), nullable=False
     )
     tenant_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
     token_hash: Mapped[str] = mapped_column(String(64), nullable=False)
@@ -202,7 +202,7 @@ class PortalToken(Base):
 
 class PlatformSetting(Base):
     __tablename__ = "platform_settings"
-    __table_args__ = {"schema": "balanca"}
+    __table_args__ = {"schema": "tara"}
 
     key: Mapped[str] = mapped_column(String(120), primary_key=True)
     value: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -214,13 +214,13 @@ class PlatformSetting(Base):
 class Cliente(Base):
     __tablename__ = "clientes"
     __table_args__ = (
-        UniqueConstraint("tenant_id", "sistema_cliente", "tenant_cliente_id", name="uq_balanca_clientes_external_tenant"),
-        {"schema": "balanca"},
+        UniqueConstraint("tenant_id", "sistema_cliente", "tenant_cliente_id", name="uq_TARA_clientes_external_tenant"),
+        {"schema": "tara"},
     )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
     tenant_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
-    conta_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("balanca.contas.id"), nullable=False)
+    conta_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("tara.contas.id"), nullable=False)
     sistema_cliente: Mapped[str] = mapped_column(String(80), nullable=False)
     tenant_cliente_id: Mapped[str] = mapped_column(String(120), nullable=False)
     nome_exibicao: Mapped[str] = mapped_column(String(160), nullable=False)
@@ -229,12 +229,12 @@ class Cliente(Base):
 
 class Outbox(Base):
     __tablename__ = "eventos_outbox"
-    __table_args__ = {"schema": "balanca"}
+    __table_args__ = {"schema": "tara"}
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
     tenant_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
-    conta_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("balanca.contas.id"), nullable=False)
-    cliente_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("balanca.clientes.id"), nullable=True)
+    conta_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("tara.contas.id"), nullable=False)
+    cliente_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("tara.clientes.id"), nullable=True)
     idempotency_key: Mapped[str] = mapped_column(String(180), nullable=False)
     event_type: Mapped[str] = mapped_column(String(120), nullable=False)
     event_version: Mapped[str] = mapped_column(String(20), nullable=False)
@@ -253,8 +253,8 @@ class Outbox(Base):
 class Estacao(Base):
     __tablename__ = "estacoes"
     __table_args__ = (
-        UniqueConstraint("tenant_id", "external_id", name="uq_balanca_estacoes_external"),
-        {"schema": "balanca"},
+        UniqueConstraint("tenant_id", "external_id", name="uq_TARA_estacoes_external"),
+        {"schema": "tara"},
     )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
@@ -273,8 +273,8 @@ class Estacao(Base):
 class Operador(Base):
     __tablename__ = "operadores"
     __table_args__ = (
-        UniqueConstraint("tenant_id", "codigo", name="uq_balanca_operadores_codigo"),
-        {"schema": "balanca"},
+        UniqueConstraint("tenant_id", "codigo", name="uq_TARA_operadores_codigo"),
+        {"schema": "tara"},
     )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
@@ -290,14 +290,14 @@ class Operador(Base):
 class Ordem(Base):
     __tablename__ = "ordens"
     __table_args__ = (
-        UniqueConstraint("tenant_id", "sistema_cliente", "referencia_externa", name="uq_balanca_ordens_external"),
-        Index("ix_balanca_ordens_status", "tenant_id", "status"),
-        {"schema": "balanca"},
+        UniqueConstraint("tenant_id", "sistema_cliente", "referencia_externa", name="uq_TARA_ordens_external"),
+        Index("ix_TARA_ordens_status", "tenant_id", "status"),
+        {"schema": "tara"},
     )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
     tenant_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
-    cliente_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("balanca.clientes.id"), nullable=False)
+    cliente_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("tara.clientes.id"), nullable=False)
     sistema_cliente: Mapped[str] = mapped_column(String(80), nullable=False)
     tenant_cliente_id: Mapped[str] = mapped_column(String(120), nullable=False)
     referencia_externa: Mapped[str] = mapped_column(String(180), nullable=False)
@@ -314,21 +314,21 @@ class Ordem(Base):
 class Pesagem(Base):
     __tablename__ = "pesagens"
     __table_args__ = (
-        UniqueConstraint("tenant_id", "local_id", name="uq_balanca_pesagens_local"),
-        UniqueConstraint("ordem_id", "etapa", name="uq_balanca_pesagens_ordem_etapa"),
-        {"schema": "balanca"},
+        UniqueConstraint("tenant_id", "local_id", name="uq_TARA_pesagens_local"),
+        UniqueConstraint("ordem_id", "etapa", name="uq_TARA_pesagens_ordem_etapa"),
+        {"schema": "tara"},
     )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
     tenant_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
-    ordem_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("balanca.ordens.id"), nullable=False)
+    ordem_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("tara.ordens.id"), nullable=False)
     local_id: Mapped[str] = mapped_column(String(120), nullable=False)
     etapa: Mapped[str] = mapped_column(String(30), nullable=False)
     peso_informado_kg: Mapped[Decimal | None] = mapped_column(Numeric(12, 3), nullable=True)
     peso_aferido_kg: Mapped[Decimal] = mapped_column(Numeric(12, 3), nullable=False)
     peso_tara_kg: Mapped[Decimal | None] = mapped_column(Numeric(12, 3), nullable=True)
     captured_via: Mapped[str] = mapped_column(String(20), nullable=False)
-    operador_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("balanca.operadores.id"), nullable=True)
+    operador_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("tara.operadores.id"), nullable=True)
     leitura_bruta: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     captured_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
 
@@ -336,14 +336,14 @@ class Pesagem(Base):
 class ContingenciaLote(Base):
     __tablename__ = "contingencia_lotes"
     __table_args__ = (
-        UniqueConstraint("tenant_id", "package_id", name="uq_balanca_contingencia_package"),
-        UniqueConstraint("tenant_id", "station_id", "sequence_number", name="uq_balanca_contingencia_sequence"),
-        {"schema": "balanca"},
+        UniqueConstraint("tenant_id", "package_id", name="uq_TARA_contingencia_package"),
+        UniqueConstraint("tenant_id", "station_id", "sequence_number", name="uq_TARA_contingencia_sequence"),
+        {"schema": "tara"},
     )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
     tenant_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
-    station_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("balanca.estacoes.id"), nullable=False)
+    station_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("tara.estacoes.id"), nullable=False)
     package_id: Mapped[str] = mapped_column(String(120), nullable=False)
     sequence_number: Mapped[int] = mapped_column(Integer, nullable=False)
     schema_version: Mapped[str] = mapped_column(String(30), nullable=False)
@@ -360,16 +360,16 @@ class ContingenciaLote(Base):
 class ContingenciaItem(Base):
     __tablename__ = "contingencia_itens"
     __table_args__ = (
-        UniqueConstraint("tenant_id", "local_id", name="uq_balanca_contingencia_local"),
-        {"schema": "balanca"},
+        UniqueConstraint("tenant_id", "local_id", name="uq_TARA_contingencia_local"),
+        {"schema": "tara"},
     )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
     tenant_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
-    lote_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("balanca.contingencia_lotes.id", ondelete="CASCADE"), nullable=False)
+    lote_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("tara.contingencia_lotes.id", ondelete="CASCADE"), nullable=False)
     local_id: Mapped[str] = mapped_column(String(120), nullable=False)
     status: Mapped[str] = mapped_column(String(20), nullable=False)
-    pesagem_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("balanca.pesagens.id"), nullable=True)
+    pesagem_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("tara.pesagens.id"), nullable=True)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
     payload: Mapped[dict] = mapped_column(JSONB, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)

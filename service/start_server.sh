@@ -12,5 +12,5 @@ fi
 
 cd "${SERVICE_DIR}"
 exec "${PYTHON_BIN}" -m uvicorn app.main:app \
-  --host "${BALANCA_HOST:-0.0.0.0}" \
-  --port "${BALANCA_PORT:-8010}"
+  --host "${TARA_HOST:-0.0.0.0}" \
+  --port "${TARA__PORT:-8010}"

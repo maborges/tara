@@ -1,6 +1,6 @@
 -- Configuração global de e-mail administrada pelo Backoffice da Plataforma.
 
-create table if not exists balanca.platform_settings (
+create table if not exists tara.platform_settings (
     key varchar(120) primary key,
     value text,
     is_secret boolean not null default false,
@@ -8,5 +8,5 @@ create table if not exists balanca.platform_settings (
     updated_by uuid
 );
 
-grant usage on schema balanca to borgus;
-grant select, insert, update, delete on balanca.platform_settings to borgus;
+grant usage on schema tara to borgus;
+grant select, insert, update, delete on tara.platform_settings to borgus;

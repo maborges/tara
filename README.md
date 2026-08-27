@@ -42,8 +42,8 @@ psql -h 192.168.0.2 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/008_a
 psql -h 192.168.0.2 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/008_api_client_secret_rotation.sql
 ```
 
-Configure `service/.env`, principalmente `BALANCA_DATABASE_URL`,
-`BALANCA_JWT_SECRET_SECRET`, `BALANCA_CORS_ORIGINS` e `BALANCA_PUBLIC_URL`.
+Configure `service/.env`, principalmente `TARA_DATABASE_URL`,
+`TARA_JWT_SECRET_SECRET`, `TARA_CORS_ORIGINS` e `TARA_PUBLIC_URL`.
 As credenciais SMTP são configuradas no Backoffice e persistidas no banco; não
 devem ser colocadas no `.env`.
 
@@ -102,11 +102,11 @@ curl http://127.0.0.1:8010/readyz
 
 ```bash
 cd /opt/lampp/htdocs/balanca-platform/service
-export BALANCA_BOOTSTRAP_TENANT_ID=$(uuidgen)
+export TARA_BOOTSTRAP_TENANT_ID=$(uuidgen)
 ./.venv/bin/python bootstrap_admin.py
 ```
 
-O `BALANCA_BOOTSTRAP_TENANT_ID` é um identificador técnico inicial; ele não é
+O `TARA_BOOTSTRAP_TENANT_ID` é um identificador técnico inicial; ele não é
 informado na tela de login.
 
 Terminal 2 — Backoffice:
@@ -204,17 +204,17 @@ porta:
 
 ```bash
 cd /opt/lampp/htdocs/balanca-platform/service
-BALANCA_PORT=8011 ./start_server.sh
+TARA__PORT=8011 ./start_server.sh
 ```
 
 Ao usar outra porta, aponte o backoffice para ela:
 
 ```bash
 cd /opt/lampp/htdocs/balanca-platform
-NEXT_PUBLIC_BALANCA_API_URL=http://localhost:8011 pnpm backoffice:dev
+NEXT_PUBLIC_TARA_API_URL=http://localhost:8011 pnpm backoffice:dev
 ```
 
-Depois de gerar o valor, substitua `BALANCA_JWT_SECRET_SECRET` no arquivo
+Depois de gerar o valor, substitua `TARA_JWT_SECRET_SECRET` no arquivo
 `/opt/lampp/htdocs/balanca-platform/service/.env` pelo segredo gerado. Em
 produção, o serviço não inicia com o valor padrão `change-me` nem com uma
 chave curta.
@@ -222,7 +222,7 @@ chave curta.
 Configure também a origem do frontend no `.env`:
 
 ```dotenv
-BALANCA_CORS_ORIGINS=["http://localhost:3004","http://127.0.0.1:3004"]
+TARA_CORS_ORIGINS=["http://localhost:3004","http://127.0.0.1:3004"]
 ```
 
 O banco `farms` precisa existir antes de iniciar a API. As migrations criam e
@@ -293,7 +293,7 @@ a API em `http://localhost:8010`. Para usar outra URL, defina a variável antes
 de iniciar:
 
 ```bash
-NEXT_PUBLIC_BALANCA_API_URL=http://localhost:8010 pnpm backoffice:dev
+NEXT_PUBLIC_TARA_API_URL=http://localhost:8010 pnpm backoffice:dev
 ```
 
 ### Portal do Cliente
@@ -308,23 +308,23 @@ pnpm portal:dev
 ```
 
 Acesse `http://localhost:3005`. A API deve permitir essa origem em
-`BALANCA_CORS_ORIGINS`.
+`TARA_CORS_ORIGINS`.
 
 Ou crie `portal/.env.local`:
 
 ```dotenv
-NEXT_PUBLIC_BALANCA_API_URL=http://localhost:8010
+NEXT_PUBLIC_TARA_API_URL=http://localhost:8010
 ```
 
 O primeiro administrador deve ser criado após aplicar as migrations:
 
 ```bash
 cd /opt/lampp/htdocs/balanca-platform/service
-export BALANCA_BOOTSTRAP_TENANT_ID=UUID_DO_TENANT_OPERACIONAL
+export TARA_BOOTSTRAP_TENANT_ID=UUID_DO_TENANT_OPERACIONAL
 ./.venv/bin/python bootstrap_admin.py
 ```
 
-O `BALANCA_BOOTSTRAP_TENANT_ID` é usado somente no bootstrap para vincular o
+O `TARA_BOOTSTRAP_TENANT_ID` é usado somente no bootstrap para vincular o
 administrador às operações iniciais; ele não é informado na tela. Na tela de login, informe somente o login e a senha do administrador. O
 backoffice autentica em `POST /v1/auth/login`, sem `Tenant ID` informado pelo
 operador, e usa as permissões JWT/RBAC
@@ -347,7 +347,7 @@ cd /opt/lampp/htdocs/balanca-platform/bridge
 python3 -m venv .venv
 ./.venv/bin/pip install -r requirements.txt
 cp config.yaml.example config.yaml
-./.venv/bin/python -m balanca_bridge.main
+./.venv/bin/python -m TARA_bridge.main
 ```
 
 ## Contrato com consumidores

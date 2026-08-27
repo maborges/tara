@@ -9,7 +9,7 @@ export interface ApiClient { client_id: string; nome: string; scopes: string[]; 
 export interface NewCredential { client_id: string; client_secret: string; nome: string; scopes: string[]; expires_at: string | null; }
 export interface PlatformEmailSettings { enabled: boolean; smtp_host: string | null; smtp_port: number; smtp_username: string | null; smtp_password_configured: boolean; smtp_from: string; smtp_starttls: boolean; smtp_ssl: boolean; }
 
-const API_URL = (process.env.NEXT_PUBLIC_BALANCA_API_URL || "http://localhost:8010").replace(/\/$/, "");
+const API_URL = (process.env.NEXT_PUBLIC_TARA_API_URL || "http://localhost:8010").replace(/\/$/, "");
 
 export async function apiFetch<T>(path: string, session: Session, init: RequestInit = {}): Promise<T> {
   const response = await fetch(`${API_URL}${path}`, {

@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-INSTALL_DIR="${BALANCA_BRIDGE_INSTALL_DIR:-/opt/balanca-bridge}"
-SERVICE_FILE="${BALANCA_BRIDGE_SERVICE_FILE:-/etc/systemd/system/balanca-bridge.service}"
+INSTALL_DIR="${TARA_BRIDGE_INSTALL_DIR:-/opt/balanca-bridge}"
+SERVICE_FILE="${TARA_BRIDGE_SERVICE_FILE:-/etc/systemd/system/balanca-bridge.service}"
 
 mkdir -p "${INSTALL_DIR}"
-cp -R balanca_bridge requirements.txt simulator.py config.yaml.example README.md "${INSTALL_DIR}/"
+cp -R TARA_bridge requirements.txt simulator.py config.yaml.example README.md "${INSTALL_DIR}/"
 python3 -m venv "${INSTALL_DIR}/.venv"
-if [ -n "${BALANCA_BRIDGE_WHEELHOUSE:-}" ]; then
-  "${INSTALL_DIR}/.venv/bin/pip" install --no-index --find-links "${BALANCA_BRIDGE_WHEELHOUSE}" -r "${INSTALL_DIR}/requirements.txt"
+if [ -n "${TARA_BRIDGE_WHEELHOUSE:-}" ]; then
+  "${INSTALL_DIR}/.venv/bin/pip" install --no-index --find-links "${TARA_BRIDGE_WHEELHOUSE}" -r "${INSTALL_DIR}/requirements.txt"
 else
   "${INSTALL_DIR}/.venv/bin/pip" install -r "${INSTALL_DIR}/requirements.txt"
 fi

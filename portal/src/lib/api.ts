@@ -36,7 +36,7 @@ interface AuthResponse {
   nome_conta: string;
 }
 
-const API_URL = (process.env.NEXT_PUBLIC_BALANCA_API_URL || "http://localhost:8010").replace(/\/$/, "");
+const API_URL = (process.env.NEXT_PUBLIC_TARA_API_URL || "http://localhost:8010").replace(/\/$/, "");
 
 async function parseResponse<T>(response: Response): Promise<T> {
   if (!response.ok) {

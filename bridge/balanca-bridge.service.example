@@ -5,8 +5,8 @@ After=network.target
 [Service]
 Type=simple
 WorkingDirectory=__INSTALL_DIR__
-ExecStart=__PYTHON__ -m balanca_bridge.main
-Environment=BALANCA_BRIDGE_CONFIG=__INSTALL_DIR__/config.yaml
+ExecStart=__PYTHON__ -m TARA_bridge.main
+Environment=TARA_BRIDGE_CONFIG=__INSTALL_DIR__/config.yaml
 Restart=always
 RestartSec=3
 NoNewPrivileges=true

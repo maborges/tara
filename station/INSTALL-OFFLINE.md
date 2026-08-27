@@ -22,8 +22,8 @@ backoffice do serviço Balança; não editar o conteúdo nem apagar as pesagens
 locais até receber a confirmação da importação.
 
 Quando a estação usar o serviço independente, configure no servidor Next.js
-BALANCA_SERVICE_URL, BALANCA_SERVICE_CLIENT_ID, BALANCA_SERVICE_CLIENT_SECRET e
-BALANCA_TENANT_ID. A API Key técnica é usada somente na ativação inicial; as
+TARA_SERVICE_URL, TARA_SERVICE_CLIENT_ID, TARA_SERVICE_CLIENT_SECRET e
+TARA_TENANT_ID. A API Key técnica é usada somente na ativação inicial; as
 operações posteriores usam o `station_token` próprio da estação. Assim, a
 rotação da API Key técnica não exige reinstalação nem interrompe a
 sincronização. O navegador continua falando somente com o proxy da estação; a
@@ -47,5 +47,5 @@ qualquer cliente ou estação que implemente o contrato
 
 ## Critério de contingência
 
-Nunca apagar `balanca_db` para corrigir uma falha de sincronização. Registrar o
+Nunca apagar `TARA_db` para corrigir uma falha de sincronização. Registrar o
 erro, preservar a estação e usar o reprocessamento após a rede retornar.

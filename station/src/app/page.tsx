@@ -11,7 +11,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 
 function getOrCreateFingerprint(): string {
-  const key = "balanca_device_fingerprint";
+  const key = "TARA_device_fingerprint";
   let fp = localStorage.getItem(key);
   if (!fp) {
     fp = crypto.randomUUID();

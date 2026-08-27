@@ -34,13 +34,13 @@ máquina conectada:
 
 ```bash
 ./prepare-offline-bundle.sh dist/wheelhouse
-sudo BALANCA_BRIDGE_WHEELHOUSE=/caminho/dist/wheelhouse ./install.sh
+sudo TARA_BRIDGE_WHEELHOUSE=/caminho/dist/wheelhouse ./install.sh
 ```
 
 ## Rodar
 
 ```bash
-./.venv/bin/python -m balanca_bridge.main
+./.venv/bin/python -m TARA_bridge.main
 ```
 
 Por padrão sobe em `http://0.0.0.0:8321`. Endpoints:
@@ -74,7 +74,7 @@ que a maioria dos indicadores usa:
 #   tcp: { host: 127.0.0.1, port: 4001 }
 
 # Terminal 2
-./.venv/bin/python -m balanca_bridge.main
+./.venv/bin/python -m TARA_bridge.main
 curl http://127.0.0.1:8321/peso-atual
 ```
 
@@ -90,10 +90,10 @@ After=network.target
 [Service]
 Type=simple
 WorkingDirectory=/opt/balanca-bridge
-ExecStart=/opt/balanca-bridge/.venv/bin/python -m balanca_bridge.main
+ExecStart=/opt/balanca-bridge/.venv/bin/python -m TARA_bridge.main
 Restart=always
 RestartSec=3
-Environment=BALANCA_BRIDGE_CONFIG=/opt/balanca-bridge/config.yaml
+Environment=TARA_BRIDGE_CONFIG=/opt/balanca-bridge/config.yaml
 
 [Install]
 WantedBy=multi-user.target

@@ -11,7 +11,7 @@ from app.delivery import process_pending_events
 async def run() -> None:
     settings = get_settings()
     if not settings.outbox_tenant_id:
-        raise RuntimeError("BALANCA_OUTBOX_TENANT_ID é obrigatório")
+        raise RuntimeError("TARA_OUTBOX_TENANT_ID é obrigatório")
     tenant_id = uuid.UUID(settings.outbox_tenant_id)
     sessions = async_sessionmaker(_engine, expire_on_commit=False)
     try:
