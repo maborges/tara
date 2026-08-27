@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime
 from decimal import Decimal
 
-from sqlalchemy import DateTime, ForeignKey, Index, Integer, Numeric, String, Text, UniqueConstraint
+from sqlalchemy import Boolean, DateTime, ForeignKey, Index, Integer, Numeric, String, Text, UniqueConstraint
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
@@ -127,6 +127,24 @@ class ApiClient(Base):
     last_used_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
 
+class ApiClientSecret(Base):
+    __tablename__ = "api_client_secrets"
+    __table_args__ = (
+        UniqueConstraint("api_client_id", "version", name="uq_balanca_api_client_secret_version"),
+        {"schema": "balanca"},
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
+    api_client_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("balanca.api_clients.id", ondelete="CASCADE"), nullable=False)
+    tenant_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    version: Mapped[int] = mapped_column(Integer, nullable=False)
+    secret_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="ATIVO")
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    valid_until: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    last_used_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+
 class Conta(Base):
     __tablename__ = "contas"
     __table_args__ = {"schema": "balanca"}
@@ -135,6 +153,62 @@ class Conta(Base):
     tenant_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False, unique=True)
     nome: Mapped[str] = mapped_column(String(160), nullable=False)
     status: Mapped[str] = mapped_column(String(20), nullable=False)
+
+
+class PortalUser(Base):
+    __tablename__ = "portal_users"
+    __table_args__ = (
+        UniqueConstraint("email", name="uq_balanca_portal_user_email"),
+        UniqueConstraint("usuario_id", name="uq_balanca_portal_user_usuario"),
+        {"schema": "balanca"},
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
+    usuario_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("balanca.usuarios.id", ondelete="SET NULL"), nullable=True
+    )
+    conta_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("balanca.contas.id", ondelete="CASCADE"), nullable=False
+    )
+    tenant_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    email: Mapped[str] = mapped_column(String(255), nullable=False)
+    nome_exibicao: Mapped[str] = mapped_column(String(160), nullable=False)
+    password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
+    role: Mapped[str] = mapped_column(String(40), nullable=False, default="OWNER")
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="ATIVO")
+    email_verified_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    last_login_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+
+class PortalToken(Base):
+    __tablename__ = "portal_tokens"
+    __table_args__ = (
+        UniqueConstraint("token_hash", name="uq_balanca_portal_token_hash"),
+        {"schema": "balanca"},
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
+    portal_user_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("balanca.portal_users.id", ondelete="CASCADE"), nullable=False
+    )
+    tenant_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    token_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    purpose: Mapped[str] = mapped_column(String(40), nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    used_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+
+
+class PlatformSetting(Base):
+    __tablename__ = "platform_settings"
+    __table_args__ = {"schema": "balanca"}
+
+    key: Mapped[str] = mapped_column(String(120), primary_key=True)
+    value: Mapped[str | None] = mapped_column(Text, nullable=True)
+    is_secret: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    updated_by: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
 
 
 class Cliente(Base):

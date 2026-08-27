@@ -21,9 +21,14 @@ async def main() -> None:
     nome = input("Nome exibido: ").strip()
     password = getpass.getpass("Senha (mínimo 8 caracteres): ")
     async with async_sessionmaker(_engine, expire_on_commit=False)() as session:
-        await set_tenant_context(session, str(tenant_id))
-        await bootstrap_admin(session, tenant_id, login, nome, password)
-        await session.commit()
+        try:
+            await set_tenant_context(session, str(tenant_id))
+            await bootstrap_admin(session, tenant_id, login, nome, password)
+            await session.commit()
+        except ValueError as exc:
+            await session.rollback()
+            print(f"Não foi possível criar o administrador: {exc}")
+            return
     await _engine.dispose()
     print("Administrador da Balança criado.")
 

@@ -1,0 +1,24 @@
+1:"$Sreact.fragment"
+2:I[9875,["333","static/chunks/333-b3da4de3b4da4527.js","969","static/chunks/969-4e1447a41701c2cb.js","162","static/chunks/app/forgot-password/page-289d6e5d9153f9c9.js"],"ForgotPassword"]
+3:I[5673,[],"OutletBoundary"]
+4:"$Sreact.suspense"
+8:I[5673,[],"ViewportBoundary"]
+9:I[5673,[],"MetadataBoundary"]
+a:I[8348,[],"IconMark"]
+c:I[9964,[],""]
+d:I[1962,[],""]
+10:I[4969,["969","static/chunks/969-4e1447a41701c2cb.js","177","static/chunks/app/layout-11a501dc187e28c0.js"],"Toaster"]
+:HL["/_next/static/css/32abfd0f9d0813dc.css","style"]
+7:X
+f:X
+f:C
+0:{"buildId":"m-uFsEQZgApTVCnq49FIH","data":[{"rsc":["$","$1","c",{"children":[["$","$L2",null,{}],null,["$","$L3",null,{"children":["$","$4",null,{"name":"Next.MetadataOutlet","children":"$@5"}]}]]}],"isPartial":"$@6","staleTime":"$7","varyParams":null},{"rsc":["$","$1","h",{"children":[null,["$","$L8",null,{"children":[["$","meta","0",{"charSet":"utf-8"}],["$","meta","1",{"name":"viewport","content":"width=device-width, initial-scale=1"}]]}],["$","div",null,{"hidden":true,"children":["$","$L9",null,{"children":["$","$4",null,{"name":"Next.Metadata","children":[["$","title","0",{"children":"Balança | Portal do Cliente"}],["$","meta","1",{"name":"description","content":"Administre sua integração com a Plataforma Balança"}],["$","link","2",{"rel":"icon","href":"/icon.svg?693fd6ca02aaf01c","type":"image/svg+xml","sizes":"any"}],["$","$La","3",{}]]}]}]}],null]}],"isPartial":"$@b","staleTime":"$7","varyParams":null},{"rsc":["$","$1","c",{"children":[null,["$","$Lc",null,{"parallelRouterKey":"children","template":["$","$Ld",null,{}]}]]}],"isPartial":"$@e","staleTime":"$7","varyParams":"$f"},{"rsc":["$","$1","c",{"children":[[["$","link","0",{"rel":"stylesheet","href":"/_next/static/css/32abfd0f9d0813dc.css","precedence":"next"}]],["$","html",null,{"lang":"pt-BR","suppressHydrationWarning":true,"children":["$","body",null,{"suppressHydrationWarning":true,"children":[["$","$Lc",null,{"parallelRouterKey":"children","template":["$","$Ld",null,{}],"notFound":[[["$","title",null,{"children":"404: This page could not be found."}],["$","div",null,{"style":{"fontFamily":"system-ui,\"Segoe UI\",Roboto,Helvetica,Arial,sans-serif,\"Apple Color Emoji\",\"Segoe UI Emoji\"","height":"100vh","textAlign":"center","display":"flex","flexDirection":"column","alignItems":"center","justifyContent":"center"},"children":["$","div",null,{"children":[["$","style",null,{"dangerouslySetInnerHTML":{"__html":"body{color:#000;background:#fff;margin:0}.next-error-h1{border-right:1px solid rgba(0,0,0,.3)}@media (prefers-color-scheme:dark){body{color:#fff;background:#000}.next-error-h1{border-right:1px solid rgba(255,255,255,.3)}}"}}],["$","h1",null,{"className":"next-error-h1","style":{"display":"inline-block","margin":"0 20px 0 0","padding":"0 23px 0 0","fontSize":24,"fontWeight":500,"verticalAlign":"top","lineHeight":"49px"},"children":404}],["$","div",null,{"style":{"display":"inline-block"},"children":["$","h2",null,{"style":{"fontSize":14,"fontWeight":400,"lineHeight":"49px","margin":0},"children":"This page could not be found."}]}]]}]}]],[]]}],["$","$L10",null,{"position":"top-right","richColors":true,"closeButton":true}]]}]}]]}],"isPartial":"$@11","staleTime":"$7","varyParams":null}],"isUpgradeableISRFallback":false,"a":"$@12","rootVaryParams":null,"needsRuntimeRequest":"$@13"}
+5:null
+7:300
+13:true
+7:C
+12:0
+b:"$undefined"
+e:"$undefined"
+11:"$undefined"
+6:"$undefined"

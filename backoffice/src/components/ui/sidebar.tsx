@@ -529,6 +529,8 @@ function SidebarMenuButton({
     }
   }
 
+  if (!baseElement) return null
+
   return (
     <Tooltip>
       <TooltipTrigger render={baseElement} />

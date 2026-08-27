@@ -61,12 +61,16 @@ async function proxy(request: NextRequest, ctx: { params: Promise<{ path: string
   const headers = new Headers(request.headers);
 
   headers.set("host", new URL(backendUrl).host);
-  if (standaloneService) {
+  // A API Key técnica é necessária apenas para a ativação inicial. Depois
+  // disso, a estação autentica suas operações com o station_token próprio.
+  // Isso permite rotacionar a credencial técnica sem interromper estações
+  // ativas ou suas filas offline.
+  if (standaloneService && path.join("/") === "balanca/devices/activate") {
     headers.set("X-Balanca-Client-ID", process.env.BALANCA_SERVICE_CLIENT_ID || "");
     headers.set("X-Balanca-Client-Secret", process.env.BALANCA_SERVICE_CLIENT_SECRET || "");
-    if (!headers.get("X-Tenant-ID") && process.env.BALANCA_TENANT_ID) {
-      headers.set("X-Tenant-ID", process.env.BALANCA_TENANT_ID);
-    }
+  }
+  if (standaloneService && !headers.get("X-Tenant-ID") && process.env.BALANCA_TENANT_ID) {
+    headers.set("X-Tenant-ID", process.env.BALANCA_TENANT_ID);
   }
 
   try {

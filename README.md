@@ -7,6 +7,7 @@ backoffice, contingência por pendrive e APIs para qualquer aplicação cliente.
 balanca-platform/
 ├── service/     API, banco, migrations e testes
 ├── backoffice/  aplicação web administrativa
+├── portal/      aplicação web de autoatendimento do cliente
 ├── station/     PWA offline-first da estação
 ├── bridge/      Bridge serial/TCP do indicador físico
 ├── contracts/   Contratos compartilhados da integração
@@ -16,6 +17,156 @@ balanca-platform/
 O AgroSaaS não importa código deste projeto. Ele usa somente as APIs da
 Balança, por meio do adaptador localizado em
 `services/api/integracoes/balanca/`.
+
+## Como iniciar o Backoffice Global e o Portal do Cliente
+
+O Backoffice Global e o Portal do Cliente são aplicações distintas. O
+Backoffice administra a plataforma e configura o SMTP; o Portal é utilizado
+pelas contas consumidoras para gerar e administrar suas próprias API Keys.
+
+### 1. Preparar banco e serviço
+
+O banco correto é `farms`; `balanca` é o schema:
+
+```bash
+cd /opt/lampp/htdocs/balanca-platform/service
+psql -h 192.168.0.2 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/000_platform_foundation.sql
+psql -h 192.168.0.2 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/001_service_tables.sql
+psql -h 192.168.0.2 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/002_security_identity.sql
+psql -h 192.168.0.2 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/003_contingency.sql
+psql -h 192.168.0.2 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/004_platform_admin.sql
+psql -h 192.168.0.2 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/005_customer_portal.sql
+psql -h 192.168.0.2 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/006_portal_email_security.sql
+psql -h 192.168.0.2 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/007_platform_email_settings.sql
+psql -h 192.168.0.2 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/008_api_client_secret_rotation.sql
+psql -h 192.168.0.2 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/008_api_client_secret_rotation.sql
+```
+
+Configure `service/.env`, principalmente `BALANCA_DATABASE_URL`,
+`BALANCA_JWT_SECRET_SECRET`, `BALANCA_CORS_ORIGINS` e `BALANCA_PUBLIC_URL`.
+As credenciais SMTP são configuradas no Backoffice e persistidas no banco; não
+devem ser colocadas no `.env`.
+
+Terminal 1 — API:
+
+```bash
+cd /opt/lampp/htdocs/balanca-platform/service
+./start_server.sh
+```
+
+### Como derrubar o serviço da Balança
+
+Se a API estiver ocupando o terminal atual, pressione `Ctrl+C`.
+
+Se estiver rodando em segundo plano, localize o processo que escuta a porta
+`8010`:
+
+```bash
+lsof -nP -iTCP:8010 -sTCP:LISTEN
+```
+
+Encerre-o normalmente usando o PID retornado:
+
+```bash
+kill -TERM PID
+```
+
+Verifique se ainda está ativo:
+
+```bash
+ps -p PID
+lsof -nP -iTCP:8010 -sTCP:LISTEN
+```
+
+Se o processo permanecer ativo, force o encerramento somente após confirmar o
+PID correto:
+
+```bash
+kill -KILL PID
+```
+
+Não encerre o processo da porta `8000`: ele pertence ao AgroSaaS. Se o serviço
+da Balança voltar a aparecer automaticamente, verifique se existe outro
+terminal, supervisor ou script reiniciando `uvicorn`.
+
+Valide:
+
+```bash
+curl http://127.0.0.1:8010/healthz
+curl http://127.0.0.1:8010/readyz
+```
+
+### 2. Iniciar o Backoffice Global
+
+*** Crie o primeiro administrador apenas uma vez: ***
+
+```bash
+cd /opt/lampp/htdocs/balanca-platform/service
+export BALANCA_BOOTSTRAP_TENANT_ID=$(uuidgen)
+./.venv/bin/python bootstrap_admin.py
+```
+
+O `BALANCA_BOOTSTRAP_TENANT_ID` é um identificador técnico inicial; ele não é
+informado na tela de login.
+
+Terminal 2 — Backoffice:
+
+```bash
+cd /opt/lampp/htdocs/balanca-platform
+pnpm install
+pnpm backoffice:dev
+```
+
+Acesse [http://localhost:3004](http://localhost:3004) e entre somente com o
+login e a senha do administrador da plataforma. Depois acesse:
+
+```text
+Configurações → Configuração de e-mail
+```
+
+Informe o SMTP, salve a configuração no banco e envie um e-mail de teste.
+
+### 3. Iniciar o Portal do Cliente
+
+Terminal 3 — Portal:
+
+```bash
+cd /opt/lampp/htdocs/balanca-platform
+pnpm portal:dev
+```
+
+Acesse [http://localhost:3005](http://localhost:3005). O cliente poderá criar
+sua conta, confirmar o e-mail recebido, entrar no Portal e gerar suas API Keys
+sem depender do administrador global.
+
+O Portal também disponibiliza:
+
+```text
+/forgot-password
+/verify-email?token=TOKEN_RECEBIDO_POR_EMAIL
+/reset-password?token=TOKEN_RECEBIDO_POR_EMAIL
+```
+
+### Reset ou rotação de API Key
+
+O Client Secret não pode ser reenviado: por segurança, a Plataforma Balança
+não armazena o segredo em texto recuperável. Se ele for perdido, use a ação
+`Resetar/rotacionar segredo` no Portal do Cliente ou no Backoffice Global.
+
+Antes de confirmar a operação, atualize o sistema consumidor para aceitar a
+troca. A rotação:
+
+1. coloca o Client Secret anterior em período de transição por 24 horas;
+2. mantém o mesmo `client_id`, permissões e validade da credencial;
+3. gera um novo Client Secret;
+4. exibe o novo segredo somente uma vez;
+5. exige que o cliente atualize sua configuração antes do fim da transição;
+6. revoga o segredo anterior ao final da janela de transição.
+
+Durante a transição, o sistema consumidor ficará sem autenticar. Se houver
+suspeita de comprometimento e a integração não puder continuar, use `Revogar`,
+que desativa completamente a API Key. Para voltar a integrar depois, será
+necessário criar uma nova credencial.
 
 ## Início rápido
 
@@ -27,8 +178,7 @@ Balança, por meio do adaptador localizado em
 3. Inicie a API da Balança.
 4. Crie o primeiro administrador.
 5. Instale e inicie o frontend do backoffice.
-6. Acesse `http://localhost:3004` e faça login com o tenant informado no
-   bootstrap.
+6. Acesse `http://localhost:3004` e faça login com o administrador global.
 
 Estação, Bridge e worker de outbox ficam para a etapa seguinte. O backoffice
 administra clientes consumidores, credenciais de integração, estações,
@@ -90,6 +240,9 @@ psql -h 192.168.0.2 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/001_s
 psql -h 192.168.0.2 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/002_security_identity.sql
 psql -h 192.168.0.2 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/003_contingency.sql
 psql -h 192.168.0.2 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/004_platform_admin.sql
+psql -h 192.168.0.2 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/005_customer_portal.sql
+psql -h 192.168.0.2 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/006_portal_email_security.sql
+psql -h 192.168.0.2 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/007_platform_email_settings.sql
 ```
 
 Inicie a API:
@@ -143,7 +296,21 @@ de iniciar:
 NEXT_PUBLIC_BALANCA_API_URL=http://localhost:8010 pnpm backoffice:dev
 ```
 
-Ou crie `backoffice/.env.local`:
+### Portal do Cliente
+
+O Portal do Cliente é separado do Backoffice Global. Ele permite criar uma
+conta, autenticar o administrador do cliente e administrar API Keys da própria
+conta.
+
+```bash
+cd /opt/lampp/htdocs/balanca-platform
+pnpm portal:dev
+```
+
+Acesse `http://localhost:3005`. A API deve permitir essa origem em
+`BALANCA_CORS_ORIGINS`.
+
+Ou crie `portal/.env.local`:
 
 ```dotenv
 NEXT_PUBLIC_BALANCA_API_URL=http://localhost:8010

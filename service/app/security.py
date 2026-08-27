@@ -9,12 +9,12 @@ from datetime import datetime, timedelta, timezone
 import bcrypt
 from fastapi import Depends, Header, HTTPException
 from jose import JWTError, jwt
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .config import get_settings
 from .db import get_session, set_tenant_context
-from .models import ApiClient, Papel, PapelPermissao, Permissao, Usuario, UsuarioPapel
+from .models import AdministradorPlataforma, ApiClient, ApiClientSecret, Papel, PapelPermissao, Permissao, PortalUser, Usuario, UsuarioPapel
 
 
 BACKOFFICE_PERMISSIONS = {
@@ -63,6 +63,22 @@ def issue_backoffice_token(user: Usuario, permissions: set[str]) -> str:
     return jwt.encode(payload, settings.jwt_secret_secret, algorithm=settings.jwt_algorithm)
 
 
+def issue_portal_token(user: PortalUser) -> str:
+    settings = get_settings()
+    now = datetime.now(timezone.utc)
+    payload = {
+        "sub": str(user.id),
+        "tenant_id": str(user.tenant_id),
+        "account_id": str(user.conta_id),
+        "type": "balanca_portal",
+        "role": user.role,
+        "iat": int(now.timestamp()),
+        "exp": int((now + timedelta(minutes=settings.jwt_access_minutes)).timestamp()),
+        "jti": secrets.token_urlsafe(18),
+    }
+    return jwt.encode(payload, settings.jwt_secret_secret, algorithm=settings.jwt_algorithm)
+
+
 def _decode_backoffice_token(token: str) -> dict:
     try:
         payload = jwt.decode(
@@ -75,6 +91,76 @@ def _decode_backoffice_token(token: str) -> dict:
     if payload.get("type") != "balanca_backoffice":
         raise HTTPException(status_code=401, detail="Token não é do backoffice da Balança")
     return payload
+
+
+def _decode_portal_token(token: str) -> dict:
+    try:
+        payload = jwt.decode(
+            token,
+            get_settings().jwt_secret_secret,
+            algorithms=[get_settings().jwt_algorithm],
+        )
+    except JWTError as exc:
+        raise HTTPException(status_code=401, detail="Token do portal inválido ou expirado") from exc
+    if payload.get("type") != "balanca_portal":
+        raise HTTPException(status_code=401, detail="Token não é do Portal do Cliente")
+    return payload
+
+
+async def require_portal(
+    authorization: str | None = Header(None, alias="Authorization"),
+    session: AsyncSession = Depends(get_session),
+) -> tuple[uuid.UUID, AsyncSession, PortalUser]:
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Bearer do portal ausente")
+    payload = _decode_portal_token(authorization.split(" ", 1)[1])
+    try:
+        tenant_id = uuid.UUID(payload["tenant_id"])
+        user_id = uuid.UUID(payload["sub"])
+    except (KeyError, ValueError) as exc:
+        raise HTTPException(status_code=401, detail="Token do portal inválido") from exc
+    await set_tenant_context(session, str(tenant_id))
+    user = (await session.execute(
+        select(PortalUser).where(
+            PortalUser.id == user_id,
+            PortalUser.tenant_id == tenant_id,
+            PortalUser.status == "ATIVO",
+        )
+    )).scalar_one_or_none()
+    if user is None:
+        raise HTTPException(status_code=401, detail="Usuário do portal inativo")
+    return tenant_id, session, user
+
+
+def require_portal_admin():
+    async def dependency(context=Depends(require_portal)):
+        if context[2].role not in {"OWNER", "ADMIN"}:
+            raise HTTPException(status_code=403, detail="Permissão insuficiente")
+        return context
+
+    return dependency
+
+
+async def require_platform_admin(
+    authorization: str | None = Header(None, alias="Authorization"),
+    session: AsyncSession = Depends(get_session),
+):
+    """Autoriza operações globais pelo vínculo do administrador da plataforma."""
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Bearer do backoffice ausente")
+    payload = _decode_backoffice_token(authorization.split(" ", 1)[1])
+    try:
+        user_id = uuid.UUID(payload["sub"])
+    except (KeyError, ValueError) as exc:
+        raise HTTPException(status_code=401, detail="Token do backoffice inválido") from exc
+    admin = (await session.execute(select(AdministradorPlataforma).where(
+        AdministradorPlataforma.usuario_id == user_id,
+        AdministradorPlataforma.status == "ATIVO",
+    ))).scalar_one_or_none()
+    if admin is None:
+        raise HTTPException(status_code=403, detail="Administrador da plataforma necessário")
+    await set_tenant_context(session, str(admin.tenant_id))
+    return session, admin
 
 
 async def _permission_set(session: AsyncSession, user_id: uuid.UUID, tenant_id: uuid.UUID) -> set[str]:
@@ -148,13 +234,19 @@ async def require_client_context(
             ApiClient.status == "ATIVO",
         )
     )).scalar_one_or_none()
-    if client is None or not hmac.compare_digest(
-        client.secret_hash, hashlib.sha256(x_client_secret.encode()).hexdigest()
-    ):
+    secret_hash = hashlib.sha256(x_client_secret.encode()).hexdigest()
+    secret = None if client is None else (await session.execute(select(ApiClientSecret).where(
+        ApiClientSecret.api_client_id == client.id,
+        ApiClientSecret.tenant_id == tenant_id,
+        ApiClientSecret.secret_hash == secret_hash,
+        or_(ApiClientSecret.status == "ATIVO", (ApiClientSecret.status == "TRANSICAO") & (ApiClientSecret.valid_until > datetime.utcnow())),
+    ))).scalar_one_or_none()
+    if client is None or secret is None:
         raise HTTPException(status_code=401, detail="Credencial da aplicação inválida")
     if client.expires_at and client.expires_at < datetime.utcnow():
         raise HTTPException(status_code=401, detail="Credencial da aplicação expirada")
     client.last_used_at = datetime.utcnow()
+    secret.last_used_at = datetime.utcnow()
     return client.tenant_id, session, client
 
 

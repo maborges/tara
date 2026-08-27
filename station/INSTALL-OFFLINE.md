@@ -23,9 +23,11 @@ locais até receber a confirmação da importação.
 
 Quando a estação usar o serviço independente, configure no servidor Next.js
 BALANCA_SERVICE_URL, BALANCA_SERVICE_CLIENT_ID, BALANCA_SERVICE_CLIENT_SECRET e
-BALANCA_TENANT_ID. O navegador
-continua falando somente com o proxy da estação; a chave do serviço não deve
-ser publicada em código ou variável NEXT_PUBLIC_*.
+BALANCA_TENANT_ID. A API Key técnica é usada somente na ativação inicial; as
+operações posteriores usam o `station_token` próprio da estação. Assim, a
+rotação da API Key técnica não exige reinstalação nem interrompe a
+sincronização. O navegador continua falando somente com o proxy da estação; a
+chave do serviço não deve ser publicada em código ou variável NEXT_PUBLIC_*.
 
 ## Atualização
 

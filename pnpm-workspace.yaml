@@ -1,5 +1,6 @@
 packages:
   - station
   - backoffice
+  - portal
 ignoredBuiltDependencies:
   - unrs-resolver

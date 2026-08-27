@@ -67,6 +67,7 @@ psql --set=ON_ERROR_STOP=1 "$BALANCA_DATABASE_URL" -f migrations/001_service_tab
 psql --set=ON_ERROR_STOP=1 "$BALANCA_DATABASE_URL" -f migrations/002_security_identity.sql
 psql --set=ON_ERROR_STOP=1 "$BALANCA_DATABASE_URL" -f migrations/003_contingency.sql
 psql --set=ON_ERROR_STOP=1 "$BALANCA_DATABASE_URL" -f migrations/004_platform_admin.sql
+psql --set=ON_ERROR_STOP=1 "$BALANCA_DATABASE_URL" -f migrations/005_customer_portal.sql
 ./start_server.sh
 ```
 

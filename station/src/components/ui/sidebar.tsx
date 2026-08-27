@@ -523,6 +523,8 @@ function SidebarMenuButton({
     return baseElement
   }
 
+  if (!baseElement) return null
+
   if (typeof tooltip === "string") {
     tooltip = {
       children: tooltip,

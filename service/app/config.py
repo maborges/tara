@@ -17,7 +17,10 @@ class Settings(BaseSettings):
     host: str = "0.0.0.0"
     port: int = 8010
     service_version: str = "1.0.0"
-    cors_origins: list[str] = ["http://localhost:3004", "http://127.0.0.1:3004"]
+    cors_origins: list[str] = [
+        "http://localhost:3004", "http://127.0.0.1:3004",
+        "http://localhost:3005", "http://127.0.0.1:3005",
+    ]
     outbox_tenant_id: str | None = None
     outbox_target_url: str | None = None
     outbox_target_api_key: str | None = None
@@ -25,6 +28,8 @@ class Settings(BaseSettings):
     outbox_batch_size: int = 50
     outbox_interval_seconds: int = 10
     allow_legacy_api_key: bool = False
+    public_url: str = "http://localhost:3005"
+    email_token_minutes: int = 30
 
     @model_validator(mode="after")
     def validate_production_secrets(self):

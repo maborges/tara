@@ -6,6 +6,9 @@ import { useLiveQuery } from "dexie-react-hooks";
 import bcrypt from "bcryptjs";
 import { getSession, setSession } from "@/lib/db";
 import { ativarDispositivo, ApiError } from "@/lib/api";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 
 function getOrCreateFingerprint(): string {
   const key = "balanca_device_fingerprint";

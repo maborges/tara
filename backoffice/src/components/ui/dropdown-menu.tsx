@@ -100,12 +100,10 @@ function DropdownMenuTrigger({
   }
 
   if (render) {
-    // eslint-disable-next-line react-hooks/refs
     return cloneElementWithProps(render, { ...triggerProps, ref: setTriggerNode }, children)
   }
 
   if (asChild && React.isValidElement(children)) {
-    // eslint-disable-next-line react-hooks/refs
     return cloneElementWithProps(children, { ...triggerProps, ref: setTriggerNode })
   }
 

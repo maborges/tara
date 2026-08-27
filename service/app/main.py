@@ -8,6 +8,8 @@ from sqlalchemy import text
 from .config import get_settings
 from .db import _engine, dispose_engine
 from .routes.integrations import router
+from .routes.portal import router as portal_router
+from .routes.platform import router as platform_router
 
 
 @asynccontextmanager
@@ -23,12 +25,14 @@ app = FastAPI(
     lifespan=lifespan,
 )
 app.include_router(router)
+app.include_router(portal_router)
+app.include_router(platform_router)
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=get_settings().cors_origins,
     allow_credentials=False,
-    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_methods=["GET", "POST", "PUT", "OPTIONS"],
     allow_headers=[
         "Authorization",
         "Content-Type",

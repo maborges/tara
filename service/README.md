@@ -23,11 +23,15 @@ Comandos:
     psql --set=ON_ERROR_STOP=1 "$BALANCA_DATABASE_URL" -f migrations/002_security_identity.sql
     psql --set=ON_ERROR_STOP=1 "$BALANCA_DATABASE_URL" -f migrations/003_contingency.sql
     psql --set=ON_ERROR_STOP=1 "$BALANCA_DATABASE_URL" -f migrations/004_platform_admin.sql
+    psql --set=ON_ERROR_STOP=1 "$BALANCA_DATABASE_URL" -f migrations/005_customer_portal.sql
     ./start_server.sh
 
 Endpoints:
 
 - POST /v1/auth/login;
+- POST /v1/portal/auth/register e /auth/login;
+- GET /v1/portal/me;
+- GET/POST /v1/portal/api-clients e rotação/revogação;
 - POST /v1/admin/api-clients;
 - GET /v1/admin/api-clients;
 - POST /v1/admin/api-clients/{client_id}/rotate e /revoke;

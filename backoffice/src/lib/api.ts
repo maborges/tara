@@ -7,6 +7,7 @@ export interface Operator { id: string; codigo: string; nome_exibicao: string; p
 export interface Event { id: string; idempotency_key: string; event_type: string; event_version: string; correlation_id: string; status: string; payload: Record<string, unknown>; attempts: number; created_at: string; }
 export interface ApiClient { client_id: string; nome: string; scopes: string[]; status: string; expires_at: string | null; created_at: string; last_used_at: string | null; }
 export interface NewCredential { client_id: string; client_secret: string; nome: string; scopes: string[]; expires_at: string | null; }
+export interface PlatformEmailSettings { enabled: boolean; smtp_host: string | null; smtp_port: number; smtp_username: string | null; smtp_password_configured: boolean; smtp_from: string; smtp_starttls: boolean; smtp_ssl: boolean; }
 
 const API_URL = (process.env.NEXT_PUBLIC_BALANCA_API_URL || "http://localhost:8010").replace(/\/$/, "");
 
@@ -20,6 +21,7 @@ export async function apiFetch<T>(path: string, session: Session, init: RequestI
     const body = await response.json().catch(() => ({}));
     throw new Error(body.detail || `Erro ${response.status} ao consultar a API.`);
   }
+  if (response.status === 204) return undefined as T;
   return response.json() as Promise<T>;
 }
 
@@ -28,6 +30,10 @@ export async function login(loginValue: string, password: string) {
   if (!response.ok) { const body = await response.json().catch(() => ({})); throw new Error(body.detail || "Não foi possível entrar."); }
   return response.json() as Promise<{ access_token: string; tenant_id: string; permissions: string[]; expires_in: number }>;
 }
+
+export async function getPlatformEmailSettings(session: Session) { return apiFetch<PlatformEmailSettings>("/v1/platform/email", session); }
+export async function savePlatformEmailSettings(session: Session, payload: { enabled: boolean; smtp_host: string | null; smtp_port: number; smtp_username: string | null; smtp_password: string | null; smtp_from: string; smtp_starttls: boolean; smtp_ssl: boolean }) { return apiFetch<PlatformEmailSettings>("/v1/platform/email", session, { method: "PUT", body: JSON.stringify(payload) }); }
+export async function testPlatformEmail(session: Session, recipient: string) { return apiFetch<void>("/v1/platform/email/test", session, { method: "POST", body: JSON.stringify({ recipient }) }); }
 
 export async function createApiClient(session: Session, payload: { nome: string; scopes: string[]; expires_at: string | null }) {
   return apiFetch<NewCredential>("/v1/admin/api-clients", session, { method: "POST", body: JSON.stringify(payload) });

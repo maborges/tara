@@ -1,0 +1,9 @@
+{
+  "/_not-found/page": "app/_not-found/page.js",
+  "/_global-error/page": "app/_global-error/page.js",
+  "/icon.svg/route": "app/icon.svg/route.js",
+  "/forgot-password/page": "app/forgot-password/page.js",
+  "/page": "app/page.js",
+  "/reset-password/page": "app/reset-password/page.js",
+  "/verify-email/page": "app/verify-email/page.js"
+}

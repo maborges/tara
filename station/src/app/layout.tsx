@@ -5,6 +5,9 @@ export const metadata: Metadata = {
   title: "Tara | AgroSaaS",
   description: "Terminal de operação de pesagem offline-first",
   manifest: "/manifest.json",
+  icons: {
+    icon: "/icon.png",
+  },
 };
 
 export const viewport: Viewport = {

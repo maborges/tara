@@ -1,4 +1,9 @@
-import { parseDecimalBR } from "@farm/utils"
+function parseDecimalBR(value: string | number | null | undefined): number {
+  if (typeof value === "number") return value
+  if (value == null || value === "") return Number.NaN
+  const normalized = String(value).replace(/\./g, "").replace(",", ".")
+  return Number(normalized)
+}
 
 type ClassValue =
   | string

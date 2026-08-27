@@ -33,6 +33,95 @@ class LoginOut(BaseModel):
     permissions: list[str]
 
 
+class PortalRegisterIn(BaseModel):
+    nome_conta: str = Field(min_length=2, max_length=160)
+    nome_exibicao: str = Field(min_length=2, max_length=160)
+    email: str = Field(min_length=5, max_length=255)
+    password: str = Field(min_length=8, max_length=128)
+
+
+class PortalLoginOut(BaseModel):
+    access_token: str
+    token_type: Literal["bearer"] = "bearer"
+    expires_in: int
+    user_id: uuid.UUID
+    account_id: uuid.UUID
+    tenant_id: uuid.UUID
+    nome_conta: str
+    nome_exibicao: str
+    email: str
+    role: str
+
+
+class PortalRegisterOut(BaseModel):
+    message: str
+    email: str
+
+
+class PortalActionOut(BaseModel):
+    message: str
+
+
+class PortalResetTokenOut(BaseModel):
+    valido: bool
+    email: str | None = None
+    expira_em: datetime | None = None
+    mensagem: str | None = None
+
+
+class PortalForgotPasswordIn(BaseModel):
+    email: str = Field(min_length=5, max_length=255)
+
+
+class PortalEmailTokenIn(BaseModel):
+    token: str = Field(min_length=32, max_length=256)
+
+
+class PortalPasswordResetIn(PortalEmailTokenIn):
+    password: str = Field(min_length=8, max_length=128)
+
+
+class PortalAccountUpdateIn(BaseModel):
+    nome_conta: str = Field(min_length=2, max_length=160)
+    nome_exibicao: str = Field(min_length=2, max_length=160)
+
+
+class PlatformEmailSettingsIn(BaseModel):
+    enabled: bool = False
+    smtp_host: str | None = Field(default=None, max_length=255)
+    smtp_port: int = Field(default=587, ge=1, le=65535)
+    smtp_username: str | None = Field(default=None, max_length=255)
+    smtp_password: str | None = Field(default=None, max_length=512)
+    smtp_from: str = Field(min_length=3, max_length=255)
+    smtp_starttls: bool = True
+    smtp_ssl: bool = False
+
+
+class PlatformEmailSettingsOut(BaseModel):
+    enabled: bool
+    smtp_host: str | None
+    smtp_port: int
+    smtp_username: str | None
+    smtp_password_configured: bool
+    smtp_from: str
+    smtp_starttls: bool
+    smtp_ssl: bool
+
+
+class PlatformEmailTestIn(BaseModel):
+    recipient: str = Field(min_length=5, max_length=255)
+
+
+class PortalMeOut(BaseModel):
+    user_id: uuid.UUID
+    account_id: uuid.UUID
+    tenant_id: uuid.UUID
+    nome_conta: str
+    nome_exibicao: str
+    email: str
+    role: str
+
+
 class ApiClientIn(BaseModel):
     nome: str = Field(min_length=1, max_length=160)
     scopes: list[str] = Field(min_length=1, max_length=30)
@@ -52,6 +141,7 @@ class ApiClientCredentialOut(ApiClientOut):
 
 
 class ApiClientStatusOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
     client_id: str
     nome: str
     scopes: list[str]

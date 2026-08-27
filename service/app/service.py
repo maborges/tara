@@ -1,26 +1,234 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 from decimal import Decimal
 import uuid
 import hashlib
 import secrets
+import asyncio
+import logging
+import smtplib
+import base64
+import ssl
+from email.message import EmailMessage
+from cryptography.fernet import Fernet, InvalidToken
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .auth import new_activation_code, new_token, station_token_hash
+from .config import get_settings
 from .db import set_tenant_context
 from .models import Cliente, Conta, Estacao, Operador, Ordem, Outbox, Pesagem
 from .models import (
-    AdministradorPlataforma, ApiClient, Papel, PapelPermissao, Permissao,
-    Usuario, UsuarioPapel,
+    AdministradorPlataforma, ApiClient, ApiClientSecret, Conta, Papel, PapelPermissao,
+    Permissao, PlatformSetting, PortalToken, PortalUser, Usuario, UsuarioPapel,
 )
 from .security import (
     BACKOFFICE_PERMISSIONS,
     INTEGRATION_SCOPES,
     hash_password,
     issue_backoffice_token,
+    issue_portal_token,
     verify_password,
 )
+
+
+async def register_portal_user(session: AsyncSession, data):
+    """Cria uma conta Balança e seu primeiro administrador do portal."""
+    email = data.email.strip().lower()
+    exists = (await session.execute(
+        select(PortalUser).where(PortalUser.email == email)
+    )).scalar_one_or_none()
+    if exists:
+        raise ValueError("E-mail já cadastrado")
+    tenant_id = uuid.uuid4()
+    await set_tenant_context(session, str(tenant_id))
+    account = Conta(
+        id=uuid.uuid4(), tenant_id=tenant_id, nome=data.nome_conta.strip(), status="ATIVA"
+    )
+    session.add(account)
+    await session.flush()
+    user = PortalUser(
+        id=uuid.uuid4(), conta_id=account.id, tenant_id=tenant_id, email=email,
+        nome_exibicao=data.nome_exibicao.strip(), password_hash=hash_password(data.password),
+        role="OWNER", status="ATIVO", created_at=datetime.utcnow(),
+    )
+    session.add(user)
+    await session.flush()
+    token = await create_portal_token(session, user, "EMAIL_CONFIRMATION")
+    await send_portal_email(session,
+        email, "Confirme seu e-mail na Plataforma Balança",
+        f"Confirme seu e-mail: {get_settings().public_url}/verify-email?token={token}",
+    )
+    return user, account
+
+
+async def login_portal_user(session: AsyncSession, email: str, password: str):
+    """Autentica um administrador do Portal e resolve sua conta."""
+    user = (await session.execute(
+        select(PortalUser).where(
+            PortalUser.email == email.strip().lower(), PortalUser.status == "ATIVO"
+        )
+    )).scalar_one_or_none()
+    if user is None or not verify_password(password, user.password_hash):
+        raise ValueError("E-mail ou senha inválidos")
+    if user.email_verified_at is None:
+        raise ValueError("Confirme seu e-mail antes de entrar")
+    await set_tenant_context(session, str(user.tenant_id))
+    user.last_login_at = datetime.utcnow()
+    account = (await session.execute(
+        select(Conta).where(Conta.id == user.conta_id, Conta.tenant_id == user.tenant_id)
+    )).scalar_one_or_none()
+    if account is None or account.status != "ATIVA":
+        raise ValueError("Conta do cliente inativa")
+    return user, account, issue_portal_token(user)
+
+
+async def create_portal_token(session, user, purpose: str) -> str:
+    """Cria token opaco, armazenando somente seu hash no banco."""
+    raw = secrets.token_urlsafe(48)
+    now = datetime.utcnow()
+    session.add(PortalToken(
+        id=uuid.uuid4(), portal_user_id=user.id, tenant_id=user.tenant_id,
+        token_hash=hashlib.sha256(raw.encode()).hexdigest(), purpose=purpose,
+        expires_at=now + timedelta(minutes=get_settings().email_token_minutes),
+        created_at=now,
+    ))
+    await session.flush()
+    return raw
+
+
+async def request_portal_password_reset(session, email: str) -> None:
+    """Solicita recuperação sem revelar se o e-mail existe."""
+    user = (await session.execute(select(PortalUser).where(
+        PortalUser.email == email.strip().lower(), PortalUser.status == "ATIVO"
+    ))).scalar_one_or_none()
+    if user is None:
+        return
+    await set_tenant_context(session, str(user.tenant_id))
+    raw = await create_portal_token(session, user, "PASSWORD_RESET")
+    await send_portal_email(session,
+        user.email, "Recuperação de senha da Plataforma Balança",
+        f"Redefina sua senha: {get_settings().public_url}/reset-password?token={raw}",
+    )
+
+
+async def confirm_portal_email(session, raw_token: str) -> None:
+    """Confirma e-mail usando token único e com expiração."""
+    token, user = await get_valid_portal_token(session, raw_token, "EMAIL_CONFIRMATION")
+    user.email_verified_at = datetime.utcnow()
+    token.used_at = datetime.utcnow()
+
+
+async def reset_portal_password(session, raw_token: str, password: str) -> None:
+    """Troca senha e invalida o token usado."""
+    token, user = await get_valid_portal_token(session, raw_token, "PASSWORD_RESET")
+    user.password_hash = hash_password(password)
+    token.used_at = datetime.utcnow()
+
+
+async def verify_portal_password_reset_token(session, raw_token: str):
+    try:
+        token, user = await get_valid_portal_token(session, raw_token, "PASSWORD_RESET")
+    except ValueError:
+        return None
+    return token, user
+
+
+async def get_valid_portal_token(session, raw_token: str, purpose: str):
+    token_hash = hashlib.sha256(raw_token.encode()).hexdigest()
+    token = (await session.execute(select(PortalToken).where(
+        PortalToken.token_hash == token_hash, PortalToken.purpose == purpose,
+        PortalToken.used_at.is_(None), PortalToken.expires_at > datetime.utcnow(),
+    ))).scalar_one_or_none()
+    if token is None:
+        raise ValueError("Token inválido ou expirado")
+    await set_tenant_context(session, str(token.tenant_id))
+    user = (await session.execute(select(PortalUser).where(
+        PortalUser.id == token.portal_user_id, PortalUser.status == "ATIVO"
+    ))).scalar_one_or_none()
+    if user is None:
+        raise ValueError("Usuário do portal inválido")
+    return token, user
+
+
+async def send_portal_email(session, recipient: str, subject: str, body: str) -> None:
+    """Entrega mensagem usando a configuração persistida do Backoffice."""
+    settings = await load_email_settings(session)
+    if not settings["enabled"]:
+        raise RuntimeError("Envio de e-mail não está configurado no Backoffice")
+    if not settings["smtp_host"]:
+        raise RuntimeError("SMTP não configurado no Backoffice")
+    await asyncio.to_thread(_send_smtp_email, settings, recipient, subject, body)
+
+
+async def load_email_settings(session) -> dict:
+    rows = (await session.execute(select(PlatformSetting))).scalars().all()
+    values = {row.key: row.value for row in rows}
+    return {
+        "enabled": values.get("email.enabled") == "true",
+        "smtp_host": values.get("email.smtp_host"),
+        "smtp_port": int(values.get("email.smtp_port") or 587),
+        "smtp_username": values.get("email.smtp_username"),
+        "smtp_password": decrypt_platform_secret(values.get("email.smtp_password")),
+        "smtp_from": values.get("email.smtp_from") or "no-reply@balanca.local",
+        "smtp_starttls": values.get("email.smtp_starttls", "true") == "true",
+        # Compatibilidade com configurações antigas: a porta 465 implica SSL
+        # direto quando a nova opção ainda não foi persistida.
+        "smtp_ssl": values.get("email.smtp_ssl", "true" if int(values.get("email.smtp_port") or 587) == 465 else "false") == "true",
+    }
+
+
+async def update_portal_account(session: AsyncSession, user, nome_conta: str, nome_exibicao: str):
+    account = (await session.execute(select(Conta).where(Conta.id == user.conta_id, Conta.tenant_id == user.tenant_id))).scalar_one_or_none()
+    if account is None:
+        raise ValueError("Conta do cliente não encontrada")
+    account.nome = nome_conta.strip()
+    user.nome_exibicao = nome_exibicao.strip()
+    await session.flush()
+    return account, user
+
+
+async def send_api_key_rotation_instructions(session: AsyncSession, tenant_id: uuid.UUID, client_id: str):
+    client = (await session.execute(select(ApiClient).where(ApiClient.tenant_id == tenant_id, ApiClient.client_id == client_id))).scalar_one_or_none()
+    user = (await session.execute(select(PortalUser).where(PortalUser.tenant_id == tenant_id, PortalUser.role == "OWNER", PortalUser.status == "ATIVO").order_by(PortalUser.created_at))).scalars().first()
+    if client is None or user is None:
+        raise ValueError("Credencial ou e-mail de cadastro não encontrado")
+    await send_portal_email(session, user.email, "Instruções para recuperar a API Key — Plataforma Balança", f"A API Key {client.client_id} teve uma solicitação de recuperação. Por segurança, o Client Secret não pode ser reenviado. Entre no Portal Balança, abra API Keys e use Resetar/rotacionar segredo para gerar um novo segredo. O segredo atual somente será invalidado quando a rotação for confirmada.")
+    return user.email
+
+
+def encrypt_platform_secret(value: str) -> str:
+    return Fernet(platform_fernet_key()).encrypt(value.encode()).decode()
+
+
+def decrypt_platform_secret(value: str | None) -> str | None:
+    if not value:
+        return
+    try:
+        return Fernet(platform_fernet_key()).decrypt(value.encode()).decode()
+    except InvalidToken as exc:
+        raise RuntimeError("Senha SMTP não pode ser descriptografada; salve-a novamente no Backoffice") from exc
+
+
+def platform_fernet_key() -> bytes:
+    digest = hashlib.sha256(get_settings().jwt_secret_secret.encode()).digest()
+    return base64.urlsafe_b64encode(digest)
+
+
+def _send_smtp_email(settings, recipient: str, subject: str, body: str) -> None:
+    message = EmailMessage()
+    message["From"], message["To"], message["Subject"] = settings["smtp_from"], recipient, subject
+    message.set_content(body)
+    smtp_class = smtplib.SMTP_SSL if settings["smtp_ssl"] else smtplib.SMTP
+    smtp_kwargs = {"timeout": 15}
+    if settings["smtp_ssl"]:
+        smtp_kwargs["context"] = ssl.create_default_context()
+    with smtp_class(settings["smtp_host"], settings["smtp_port"], **smtp_kwargs) as smtp:
+        if settings["smtp_starttls"] and not settings["smtp_ssl"]:
+            smtp.starttls(context=ssl.create_default_context())
+        if settings["smtp_username"]:
+            smtp.login(settings["smtp_username"], settings["smtp_password"] or "")
+        smtp.send_message(message)
 
 
 async def get_account(session: AsyncSession, tenant_id: uuid.UUID) -> Conta:
@@ -100,6 +308,16 @@ async def bootstrap_admin(
     nome_exibicao: str,
     password: str,
 ) -> Usuario:
+    platform_existing = (await session.execute(
+        select(AdministradorPlataforma).where(
+            AdministradorPlataforma.login == login,
+        )
+    )).scalar_one_or_none()
+    if platform_existing:
+        raise ValueError(
+            f"Administrador global '{login}' já existe; use o login existente "
+            f"(tenant técnico: {platform_existing.tenant_id})"
+        )
     existing = (await session.execute(
         select(Usuario).where(Usuario.tenant_id == tenant_id, Usuario.login == login)
     )).scalar_one_or_none()
@@ -189,6 +407,8 @@ async def create_api_client(
     )
     session.add(client)
     await session.flush()
+    session.add(ApiClientSecret(id=uuid.uuid4(), api_client_id=client.id, tenant_id=tenant_id, version=1, secret_hash=client.secret_hash, status="ATIVO", created_at=datetime.utcnow()))
+    await session.flush()
     return client, secret
 
 
@@ -199,7 +419,11 @@ async def rotate_api_client(session: AsyncSession, tenant_id: uuid.UUID, client_
     if client is None:
         raise ValueError("Cliente de integração não encontrado")
     secret = secrets.token_urlsafe(36)
-    client.secret_hash = hashlib.sha256(secret.encode()).hexdigest()
+    now = datetime.utcnow()
+    current_version = (await session.execute(select(ApiClientSecret.version).where(ApiClientSecret.api_client_id == client.id).order_by(ApiClientSecret.version.desc()))).scalars().first() or 1
+    overlap_until = now + timedelta(hours=24)
+    await session.execute(update(ApiClientSecret).where(ApiClientSecret.api_client_id == client.id, ApiClientSecret.status == "ATIVO").values(status="TRANSICAO", valid_until=overlap_until))
+    session.add(ApiClientSecret(id=uuid.uuid4(), api_client_id=client.id, tenant_id=tenant_id, version=current_version + 1, secret_hash=hashlib.sha256(secret.encode()).hexdigest(), status="ATIVO", created_at=now))
     client.status = "ATIVO"
     await session.flush()
     return client, secret

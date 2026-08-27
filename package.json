@@ -10,5 +10,9 @@
     "backoffice:build": "pnpm --dir backoffice build",
     "backoffice:typecheck": "pnpm --dir backoffice typecheck",
     "backoffice:lint": "pnpm --dir backoffice lint"
+    ,"portal:dev": "pnpm --dir portal dev"
+    ,"portal:build": "pnpm --dir portal build"
+    ,"portal:typecheck": "pnpm --dir portal typecheck"
+    ,"portal:lint": "pnpm --dir portal lint"
   }
 }

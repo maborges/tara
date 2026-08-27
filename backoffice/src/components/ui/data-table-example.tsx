@@ -13,8 +13,9 @@
 
 import { DataTable, ColumnDef } from "./data-table"
 import { Badge } from "./badge"
-import { format } from "date-fns"
 import { StatusBadge } from "@/components/ui/status-badge";
+
+const format = (value: Date, _pattern: string) => new Intl.DateTimeFormat("pt-BR").format(value)
 
 // Tipo de dados de exemplo
 type Usuario = {
