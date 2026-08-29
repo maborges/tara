@@ -186,7 +186,7 @@ function DialogContent({
         aria-modal="true"
         tabIndex={-1}
         className={cn(
-          "fixed top-1/2 left-1/2 z-50 flex w-full max-w-[calc(100%-2rem)] max-h-[calc(100vh-4rem)] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-sm bg-card text-sm text-card-foreground ring-1 ring-border shadow-md gap-6",
+          "fixed top-1/2 left-1/2 z-50 flex w-full max-w-md max-h-[calc(100vh-4rem)] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-sm bg-card text-sm text-card-foreground ring-1 ring-border shadow-md gap-6",
           className
         )}
         {...props}

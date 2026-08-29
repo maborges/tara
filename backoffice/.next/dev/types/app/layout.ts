@@ -1,4 +1,4 @@
-// File: /opt/lampp/htdocs/balanca-platform/backoffice/src/app/layout.tsx
+// File: /opt/lampp/htdocs/tara/backoffice/src/app/layout.tsx
 import * as entry from '../../../../src/app/layout.js'
 import type { ResolvingMetadata, ResolvingViewport } from 'next/dist/lib/metadata/types/metadata-interface.js'
 

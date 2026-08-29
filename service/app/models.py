@@ -155,6 +155,39 @@ class Conta(Base):
     status: Mapped[str] = mapped_column(String(20), nullable=False)
 
 
+class WebhookDestination(Base):
+    __tablename__ = "webhook_destinations"
+    __table_args__ = (
+        UniqueConstraint("conta_id", name="uq_TARA_webhook_destination_account"),
+        {"schema": "tara"},
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
+    tenant_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    conta_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("tara.contas.id", ondelete="CASCADE"), nullable=False)
+    target_url: Mapped[str] = mapped_column(String(500), nullable=False)
+    hmac_secret_encrypted: Mapped[str] = mapped_column(Text, nullable=False)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="ATIVO")
+    event_types: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
+    max_attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=8)
+    retry_base_seconds: Mapped[int] = mapped_column(Integer, nullable=False, default=2)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+
+
+class OutboxReplayAudit(Base):
+    __tablename__ = "outbox_replay_audits"
+    __table_args__ = {"schema": "tara"}
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
+    tenant_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    outbox_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("tara.eventos_outbox.id", ondelete="CASCADE"), nullable=False)
+    actor_user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    previous_status: Mapped[str] = mapped_column(String(20), nullable=False)
+    reason: Mapped[str] = mapped_column(String(240), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+
+
 class PortalUser(Base):
     __tablename__ = "portal_users"
     __table_args__ = (
@@ -259,6 +292,7 @@ class Estacao(Base):
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
     tenant_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    conta_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("tara.contas.id", ondelete="CASCADE"), nullable=False)
     external_id: Mapped[str] = mapped_column(String(120), nullable=False)
     nome: Mapped[str] = mapped_column(String(160), nullable=False)
     activation_code: Mapped[str | None] = mapped_column(String(12), nullable=True)
@@ -321,7 +355,7 @@ class Pesagem(Base):
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
     tenant_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
-    ordem_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("tara.ordens.id"), nullable=False)
+    ordem_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("tara.ordens.id"), nullable=True)
     local_id: Mapped[str] = mapped_column(String(120), nullable=False)
     etapa: Mapped[str] = mapped_column(String(30), nullable=False)
     peso_informado_kg: Mapped[Decimal | None] = mapped_column(Numeric(12, 3), nullable=True)
@@ -331,6 +365,11 @@ class Pesagem(Base):
     operador_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("tara.operadores.id"), nullable=True)
     leitura_bruta: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     captured_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    reconciliation_status: Mapped[str] = mapped_column(String(30), nullable=False, default="NAO_APLICAVEL")
+    direcao_veiculo: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    natureza_mercadoria: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    tipo_operacao: Mapped[str | None] = mapped_column(String(60), nullable=True)
+    contexto: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
 
 
 class ContingenciaLote(Base):

@@ -24,7 +24,7 @@ eventos e conciliação. O consumidor não acessa diretamente o banco da Balanç
 ## 3. Instalação do serviço
 
 ```bash
-cd /opt/lampp/htdocs/balanca-platform/service
+cd /opt/lampp/htdocs/tara/service
 python3 -m venv .venv
 ./.venv/bin/pip install -r requirements.txt
 cp .env.example .env
@@ -38,7 +38,7 @@ Configure o `.env`:
 TARA_DATABASE_URL=postgresql+asyncpg://usuario:senha@servidor/farms
 TARA_ENVIRONMENT=production
 TARA_JWT_SECRET_SECRET=segredo-aleatorio-com-no-minimo-32-caracteres
-TARA__PORT=8010
+TARA_PORT=8010
 TARA_CORS_ORIGINS=["http://localhost:3004","http://127.0.0.1:3004"]
 ```
 
@@ -48,19 +48,25 @@ chamado `tara`. A URL `postgresql+asyncpg://` do `.env` é usada pela API;
 para o comando `psql`, informe host, usuário e banco separadamente:
 
 ```bash
-cd /opt/lampp/htdocs/balanca-platform/service
+cd /opt/lampp/htdocs/tara/service
 psql -h 192.168.0.2 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/000_platform_foundation.sql
 psql -h 192.168.0.2 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/001_service_tables.sql
 psql -h 192.168.0.2 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/002_security_identity.sql
 psql -h 192.168.0.2 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/003_contingency.sql
 psql -h 192.168.0.2 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/004_platform_admin.sql
 psql -h 192.168.0.2 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/005_customer_portal.sql
+psql -h 192.168.0.2 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/006_portal_email_security.sql
+psql -h 192.168.0.2 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/007_platform_email_settings.sql
+psql -h 192.168.0.2 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/008_api_client_secret_rotation.sql
+psql -h 192.168.0.2 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/009_rename_balanca_schema.sql
+psql -h 192.168.0.2 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/010_station_account.sql
+psql -h 192.168.0.2 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/011_pesagem_avulsa.sql
 ```
 
 Então, inicie a API:
 
 ```bash
-cd /opt/lampp/htdocs/balanca-platform/service
+cd /opt/lampp/htdocs/tara/service
 ./start_server.sh
 ```
 
@@ -88,7 +94,7 @@ Faça login em `POST /v1/auth/login` somente com login e senha, sem informar
 Com a API em execução, abra outro terminal e inicie o frontend independente:
 
 ```bash
-cd /opt/lampp/htdocs/balanca-platform
+cd /opt/lampp/htdocs/tara
 pnpm install
 pnpm backoffice:dev
 ```
@@ -97,7 +103,7 @@ Abra `http://localhost:3004`. Se a API estiver em outra porta, informe a URL
 antes de iniciar o frontend:
 
 ```bash
-cd /opt/lampp/htdocs/balanca-platform
+cd /opt/lampp/htdocs/tara
 NEXT_PUBLIC_TARA_API_URL=http://localhost:8011 pnpm backoffice:dev
 ```
 
@@ -120,7 +126,7 @@ Escopos disponíveis: `clients:write`, `orders:write`, `events:read` e
 ## 5. Instalação da estação
 
 ```bash
-cd /opt/lampp/htdocs/balanca-platform/station
+cd /opt/lampp/htdocs/tara/station
 cp .env.example .env.local
 pnpm install
 pnpm run build
@@ -143,7 +149,7 @@ token. Depois, a captura funciona offline.
 ## 6. Bridge e indicador
 
 ```bash
-cd /opt/lampp/htdocs/balanca-platform/bridge
+cd /opt/lampp/htdocs/tara/bridge
 python3 -m venv .venv
 ./.venv/bin/pip install -r requirements.txt
 cp config.yaml.example config.yaml

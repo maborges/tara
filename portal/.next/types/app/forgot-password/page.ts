@@ -1,4 +1,4 @@
-// File: /opt/lampp/htdocs/balanca-platform/portal/src/app/forgot-password/page.tsx
+// File: /opt/lampp/htdocs/tara/portal/src/app/forgot-password/page.tsx
 import * as entry from '../../../../src/app/forgot-password/page.js'
 import type { ResolvingMetadata, ResolvingViewport } from 'next/dist/lib/metadata/types/metadata-interface.js'
 

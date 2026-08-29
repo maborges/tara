@@ -26,10 +26,12 @@ export const balancaOrderRequestSchema = balancaExternalReferenceSchema.extend({
 export const balancaEventEnvelopeSchema = z.object({
   event_id: z.string().uuid(),
   idempotency_key: z.string().min(1).max(180),
+  capture_id: z.string().min(1).max(120),
   event_type: z.string().min(1).max(120),
   event_version: z.literal("v1"),
   occurred_at: z.string().datetime(),
-  TARA_account_id: z.string().uuid(),
+  received_at: z.string().datetime(),
+  account_id: z.string().uuid(),
   client_system: z.string().min(1).max(80),
   client_tenant_id: z.string().min(1).max(120),
   correlation_id: z.string().min(1).max(160),
@@ -46,3 +48,10 @@ export const balancaOperatorLinkSchema = z.object({
 export type BalancaOrderRequest = z.infer<typeof balancaOrderRequestSchema>;
 export type BalancaEventEnvelope = z.infer<typeof balancaEventEnvelopeSchema>;
 export type BalancaOperatorLink = z.infer<typeof balancaOperatorLinkSchema>;
+
+export const balancaWeighingPageSchema = z.object({
+  items: z.array(z.record(z.string(), z.unknown())),
+  next_cursor: z.string().nullable(),
+});
+
+export type BalancaWeighingPage = z.infer<typeof balancaWeighingPageSchema>;

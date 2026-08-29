@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import "./tailwind.css";
 import "./globals.css";
 import { Toaster } from "sonner";
 

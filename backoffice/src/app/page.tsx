@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Activity, Ban, Boxes, Check, ClipboardList, Copy, Gauge, KeyRound, LogOut, Mail, Moon, PanelLeft, PanelLeftClose, Plus, RefreshCw, RotateCcw, Sun, Users, Wifi } from "lucide-react";
-import { apiFetch, createApiClient, createOperator, createStation, formatDate, login, revokeApiClient, revokeOperator, rotateApiClient, statusLabel, type ApiClient, type Event, type NewCredential, type Operator, type Order, type Session, type Station } from "@/lib/api";
+import { Activity, AlertTriangle, Ban, Boxes, Check, CheckCircle2, ClipboardList, Copy, Gauge, KeyRound, LogOut, Mail, Moon, PanelLeft, PanelLeftClose, Pencil, Plus, RefreshCw, RotateCcw, Server, Sun, Timer, TrendingUp, Users, Wifi } from "lucide-react";
+import { createApiClient, createOperator, createStation, formatDate, getAdminWeighings, getPlatformAccounts, login, reconcileAdminWeighing, replayEvent, revokeApiClient, revokeOperator, rotateApiClient, statusLabel, updateApiClient, updatePlatformAccount, type Account, type ApiClient, type Event, type NewCredential, type Operator, type Order, type PlatformAccount, type Session, type Station, type Weighing } from "@/lib/api";
 
 import { SidebarProvider, Sidebar, SidebarContent, SidebarGroup, SidebarGroupLabel, SidebarGroupContent, SidebarMenu, SidebarMenuItem, SidebarMenuButton, SidebarHeader, SidebarFooter, SidebarTrigger } from "@/components/ui/sidebar";
 import { Button } from "@/components/ui/button";
@@ -12,8 +12,10 @@ import { toast } from "sonner";
 import { DataTable, type ColumnDef } from "@/components/ui/data-table";
 import { PageHeader } from "@/components/shared/page-header";
 import { PlatformEmailSettingsPanel } from "@/components/platform-email-settings";
+import { Dialog, DialogBody, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { useBackofficeSession, type BackofficeData } from "@/lib/use-backoffice-session";
 
-type View = "overview" | "clients" | "orders" | "stations" | "operators" | "events" | "settings";
+type View = "overview" | "accounts" | "clients" | "orders" | "weighings" | "stations" | "operators" | "events" | "settings";
 const SCOPES = [["clients:write", "Registrar clientes consumidores"], ["orders:write", "Criar ordens de pesagem"], ["events:read", "Consultar eventos"], ["stations:activate", "Ativar estações"]] as const;
 
 function Badge({ value }: { value: string }) {
@@ -22,33 +24,17 @@ function Badge({ value }: { value: string }) {
 }
 
 export default function BackofficePage() {
-  const [session, setSession] = useState<Session | null>(null); const [hydrated, setHydrated] = useState(false); const [view, setView] = useState<View>("overview"); const [dark, setDark] = useState(false); const [loading, setLoading] = useState(false); const [error, setError] = useState<string | null>(null);
-  const [data, setData] = useState({ orders: [] as Order[], stations: [] as Station[], operators: [] as Operator[], events: [] as Event[], clients: [] as ApiClient[] });
-
-  useEffect(() => { try { const saved = window.sessionStorage.getItem("balanca-backoffice-session"); const savedView = window.sessionStorage.getItem("balanca-backoffice-view"); if (savedView && ["overview", "clients", "orders", "stations", "operators", "events", "settings"].includes(savedView)) setView(savedView as View); if (!saved) return; const parsed = JSON.parse(saved) as Session; if (parsed.expiresAt && parsed.expiresAt > Date.now()) setSession(parsed); else window.sessionStorage.removeItem("balanca-backoffice-session"); } catch { window.sessionStorage.removeItem("balanca-backoffice-session"); } finally { setHydrated(true); } }, []);
-  useEffect(() => { if (session) void loadData(session); }, [session]);
-
-  async function loadData(active: Session) {
-    setLoading(true); setError(null);
-    try {
-      const [orders, stations, operators, events] = await Promise.all([active.permissions.includes("backoffice:ordens:gerenciar") ? apiFetch<Order[]>("/v1/orders", active) : Promise.resolve([]), active.permissions.includes("backoffice:estacoes:gerenciar") ? apiFetch<Station[]>("/v1/stations", active) : Promise.resolve([]), active.permissions.includes("backoffice:operadores:gerenciar") ? apiFetch<Operator[]>("/v1/operators", active) : Promise.resolve([]), active.permissions.includes("backoffice:eventos:consultar") ? apiFetch<Event[]>("/v1/admin/events", active) : Promise.resolve([])]);
-      const clients = active.permissions.includes("backoffice:clientes:gerenciar") ? await apiFetch<ApiClient[]>("/v1/admin/api-clients", active) : [];
-      setData({ orders, stations, operators, events, clients });
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Falha ao carregar dados.");
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  function signOut() { window.sessionStorage.removeItem("balanca-backoffice-session"); setSession(null); }
+  const { session, hydrated, data, loading, error, setError, startSession, signOut, loadData } = useBackofficeSession();
+  const [view, setView] = useState<View>("overview");
+  const [dark, setDark] = useState(false);
+  useEffect(() => { const savedView = window.sessionStorage.getItem("balanca-backoffice-view"); if (savedView && ["overview", "accounts", "clients", "orders", "weighings", "stations", "operators", "events", "settings"].includes(savedView)) setView(savedView as View); }, []);
   function can(permission: string) { return Boolean(session?.permissions.includes(permission)); }
 
   if (!hydrated) return <BackofficeLoading />;
-  if (!session) return <LoginScreen onLogin={(next) => { window.sessionStorage.setItem("balanca-backoffice-session", JSON.stringify(next)); setSession(next); }} />;
+  if (!session) return <LoginScreen onLogin={startSession} />;
 
-  const titles: Record<View, string> = { overview: "Visão geral", clients: "Clientes e credenciais", orders: "Ordens de pesagem", stations: "Estações", operators: "Operadores", events: "Outbox de eventos", settings: "Configurações da plataforma" }; const pending = data.orders.filter((item) => item.status !== "CONCLUIDA").length;
-  const nav: [View, typeof Gauge, string, string | null][] = [["overview", Gauge, "Visão geral", null], ["clients", KeyRound, "Clientes e API Keys", "backoffice:clientes:gerenciar"], ["orders", ClipboardList, "Ordens", "backoffice:ordens:gerenciar"], ["stations", Wifi, "Estações", "backoffice:estacoes:gerenciar"], ["operators", Users, "Operadores", "backoffice:operadores:gerenciar"], ["events", Activity, "Outbox de eventos", "backoffice:eventos:consultar"], ["settings", Mail, "Configurações", null]];
+  const titles: Record<View, string> = { overview: "Visão geral", accounts: "Clientes da plataforma", clients: "Clientes e credenciais", orders: "Ordens de pesagem", weighings: "Pesagens e reconciliação", stations: "Estações", operators: "Operadores", events: "Outbox de eventos", settings: "Configurações da plataforma" }; const pending = data.orders.filter((item) => item.status !== "CONCLUIDA").length;
+  const nav: [View, typeof Gauge, string, string | null][] = [["overview", Gauge, "Visão geral", null], ["accounts", Boxes, "Clientes da plataforma", null], ["clients", KeyRound, "Clientes e API Keys", "backoffice:clientes:gerenciar"], ["orders", ClipboardList, "Ordens", "backoffice:ordens:gerenciar"], ["weighings", Gauge, "Pesagens", "backoffice:pesagens:consultar"], ["stations", Wifi, "Estações", "backoffice:estacoes:gerenciar"], ["operators", Users, "Operadores", "backoffice:operadores:gerenciar"], ["events", Activity, "Outbox de eventos", "backoffice:eventos:consultar"], ["settings", Mail, "Configurações", null]];
 
   return (
     <SidebarProvider>
@@ -123,7 +109,7 @@ export default function BackofficePage() {
 }
 
 function BackofficeLoading() {
-  return <div className="grid min-h-screen place-items-center bg-background"><div className="space-y-3 text-center"><div className="mx-auto flex size-10 items-center justify-center rounded-sm bg-primary text-lg font-bold text-primary-foreground">B</div><p className="text-sm text-muted-foreground">Restaurando sua sessão…</p></div></div>;
+  return <div className="grid min-h-screen place-items-center bg-background"><div className="space-y-3 text-center"><div className="mx-auto flex size-12 items-center justify-center"><img src="/logo.png" alt="Tara" className="size-full dark:hidden" /><img src="/logo-dark.png" alt="Tara" className="size-full hidden dark:block" /></div><p className="text-sm text-muted-foreground">Restaurando sua sessão…</p></div></div>;
 }
 
 function LoginScreen({ onLogin }: { onLogin: (session: Session) => void }) {
@@ -181,49 +167,57 @@ function LoginScreen({ onLogin }: { onLogin: (session: Session) => void }) {
   );
 }
 
-function Overview({ data, pending, loading, onRefresh }: { data: { orders: Order[]; stations: Station[]; operators: Operator[]; events: Event[]; clients: ApiClient[] }; pending: number; loading: boolean; onRefresh: () => void }) {
+function Overview({ data, pending, loading, onRefresh }: { data: BackofficeData; pending: number; loading: boolean; onRefresh: () => void }) {
+  const global = data.platformDashboard;
+  const completed = global?.orders_completed ?? data.orders.filter((item) => item.status === "CONCLUIDA").length;
+  const orderTotal = global?.orders_total ?? data.orders.length;
+  const completionRate = orderTotal ? Math.round((completed / orderTotal) * 100) : 0;
+  const delivered = global ? global.events_total - global.events_pending : data.events.filter((item) => item.status === "ENTREGUE").length;
+  const eventTotal = global?.events_total ?? data.events.length;
+  const deliveryRate = eventTotal ? Math.round((delivered / eventTotal) * 100) : 0;
+  const pendingReconciliation = global?.weighings_pending ?? data.weighings.filter((item) => !["VINCULADA", "NAO_APLICAVEL"].includes(item.reconciliation_status)).length;
+  const statusGroups = ["PENDENTE", "EM_PESAGEM", "CONCLUIDA", "ENTREGUE"].map((status) => ({ status, total: data.orders.filter((item) => item.status === status).length }));
+  const maxStatus = Math.max(1, ...statusGroups.map((item) => item.total));
+  const recentEvents = data.events.slice(0, 5);
+  const clientSystems = global?.client_systems ?? data.clients.map((client) => ({ client_id: client.client_id, nome: client.nome, account_name: "Tenant atual", status: client.status, scopes: client.scopes, last_used_at: client.last_used_at, created_at: client.created_at }));
+  const accountStatuses = Object.entries(global?.accounts_by_status ?? {}).filter(([, total]) => total > 0);
   return (
     <div className="space-y-6">
       <PageHeader
-        title="O que está acontecendo"
-        description="Uma leitura rápida da operação da sua balança."
+        title="Dashboard gerencial"
+        description={global ? "Indicadores consolidados de toda a plataforma." : "Indicadores de operação, pesagem e saúde das integrações."}
         breadcrumbs={[{ label: "Operação hoje" }]}
         icon={<Gauge className="size-6" />}
         actions={<Button variant="outline" size="sm" onClick={onRefresh} disabled={loading}><RefreshCw className={loading ? "animate-spin" : ""} size={14} /> Atualizar</Button>}
       />
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <Metric label="Ordens abertas" value={pending} icon={<ClipboardList size={16} />} />
-        <Metric label="Ordens concluídas" value={data.orders.filter((item) => item.status === "CONCLUIDA").length} icon={<Boxes size={16} />} />
-        <Metric label="Estações ativas" value={data.stations.filter((item) => item.status === "ATIVA").length} icon={<Wifi size={16} />} />
-        <Metric label="Eventos pendentes" value={data.events.filter((item) => item.status !== "ENTREGUE").length} icon={<Activity size={16} />} />
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-6">
+        <ManagementMetric label={global ? "Ordens em toda a plataforma" : "Ordens no período carregado"} value={global?.orders_total ?? data.orders.length} detail={`${global?.orders_open ?? pending} em aberto`} icon={<ClipboardList size={18} />} tone="blue" />
+        <ManagementMetric label="Taxa de conclusão" value={`${completionRate}%`} detail={`${completed} concluídas`} icon={<TrendingUp size={18} />} tone="green" />
+        <ManagementMetric label="Pesagens registradas" value={global?.weighings_total ?? data.weighings.length} detail={`${pendingReconciliation} aguardando reconciliação`} icon={<Gauge size={18} />} tone={pendingReconciliation ? "amber" : "green"} />
+        <ManagementMetric label="Entrega de eventos" value={`${deliveryRate}%`} detail={`${global?.events_pending ?? data.events.filter((item) => item.status !== "ENTREGUE").length} pendentes/falhos`} icon={<Server size={18} />} tone={deliveryRate < 90 && eventTotal ? "red" : "green"} />
+        <ManagementMetric label="Clientes consumidores" value={global?.clients_total ?? data.clients.length} detail="Integrações cadastradas" icon={<Boxes size={18} />} tone="blue" />
+        <ManagementMetric label="API Keys ativas" value={global?.api_keys_active ?? data.clients.filter((item) => item.status === "ATIVO").length} detail={global ? "Em toda a plataforma" : `${data.clients.filter((item) => item.status !== "ATIVO").length} inativas/revogadas`} icon={<KeyRound size={18} />} tone="green" />
       </div>
-      <div className="grid gap-6 lg:grid-cols-3">
-        <Card className="col-span-2">
-          <CardHeader><CardTitle>Ordens recentes</CardTitle></CardHeader>
-          <CardContent><OrderTable orders={data.orders.slice(0, 6)} hideExport /></CardContent>
+      {global && <Card><CardHeader><CardTitle>Contas por situação</CardTitle><CardDescription>{global.accounts_total} conta(s) cadastrada(s) em toda a plataforma.</CardDescription></CardHeader><CardContent className="flex flex-wrap gap-3">{accountStatuses.map(([status, total]) => <div className="flex min-w-36 items-center justify-between gap-4 rounded-md border bg-muted/30 px-4 py-3" key={status}><span className="text-sm">{statusLabel(status)}</span><strong className="text-lg">{total}</strong></div>)}</CardContent></Card>}
+      <div className="grid gap-6 lg:grid-cols-5">
+        <Card className="lg:col-span-3">
+          <CardHeader><CardTitle>Funil de ordens</CardTitle><CardDescription>Distribuição dos registros carregados por status.</CardDescription></CardHeader>
+          <CardContent className="space-y-5">{statusGroups.map((item) => <div className="space-y-2" key={item.status}><div className="flex items-center justify-between text-sm"><span>{statusLabel(item.status)}</span><strong>{item.total}</strong></div><div className="h-2 overflow-hidden rounded-full bg-muted"><div className={`h-full rounded-full ${item.status === "CONCLUIDA" ? "bg-emerald-500" : item.status === "PENDENTE" ? "bg-amber-500" : "bg-primary"}`} style={{ width: `${Math.max(item.total ? 8 : 0, (item.total / maxStatus) * 100)}%` }} /></div></div>)}{!data.orders.length && <p className="text-sm text-muted-foreground">Ainda não há ordens para compor os indicadores.</p>}</CardContent>
         </Card>
-        <Card>
-          <CardHeader>
-            <CardTitle>Estações</CardTitle>
-            <CardDescription>{data.stations.length} cadastradas</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              {data.stations.slice(0, 5).map((station) => (
-                <div className="flex items-center gap-3" key={station.id}>
-                  <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground"><Gauge size={16} /></div>
-                  <div className="flex-1 min-w-0"><p className="text-sm font-medium truncate">{station.nome}</p><p className="text-xs text-muted-foreground truncate">{station.external_id}</p></div>
-                  <div><Badge value={station.status} /></div>
-                </div>
-              ))}
-              {!data.stations.length && <p className="text-sm text-muted-foreground">Nenhuma estação cadastrada.</p>}
-            </div>
-          </CardContent>
+        <Card className="lg:col-span-2">
+          <CardHeader><CardTitle>Saúde operacional</CardTitle><CardDescription>Itens que merecem atenção da gestão.</CardDescription></CardHeader>
+          <CardContent className="space-y-4"><ManagementHealth icon={<Wifi size={16} />} label="Estações ativas" value={`${global?.stations_active ?? data.stations.filter((item) => item.status === "ATIVA").length}/${global?.stations_total ?? data.stations.length}`} warning={global ? global.stations_active < global.stations_total : data.stations.some((item) => item.status !== "ATIVA")} /><ManagementHealth icon={<Timer size={16} />} label="Reconciliações pendentes" value={pendingReconciliation} warning={pendingReconciliation > 0} /><ManagementHealth icon={<AlertTriangle size={16} />} label="Eventos com atenção" value={global?.events_pending ?? data.events.filter((item) => item.status !== "ENTREGUE").length} warning={global ? global.events_pending > 0 : data.events.some((item) => item.status !== "ENTREGUE")} /><ManagementHealth icon={<CheckCircle2 size={16} />} label="Operadores ativos" value={global?.operators_active ?? data.operators.filter((item) => item.status === "ATIVO").length} warning={false} /></CardContent>
         </Card>
       </div>
+      <div className="grid gap-6 lg:grid-cols-5"><Card className="lg:col-span-3"><CardHeader><CardTitle>Ordens recentes</CardTitle><CardDescription>Últimos registros recebidos pelo serviço.</CardDescription></CardHeader><CardContent><OrderTable orders={data.orders.slice(0, 6)} hideExport /></CardContent></Card><Card className="lg:col-span-2"><CardHeader><CardTitle>Sistemas clientes e API Keys</CardTitle><CardDescription>{global ? "Integrações consolidadas de toda a plataforma." : "Resumo das credenciais consumidoras."}</CardDescription></CardHeader><CardContent className="space-y-4"><ManagementHealth icon={<Boxes size={16} />} label="Sistemas clientes" value={global?.clients_total ?? data.clients.length} warning={false} /><ManagementHealth icon={<KeyRound size={16} />} label="API Keys ativas" value={global?.api_keys_active ?? data.clients.filter((item) => item.status === "ATIVO").length} warning={false} /><div className="border-t pt-3">{clientSystems.slice(0, 5).map((client) => <div className="flex items-center gap-3 py-2" key={client.client_id}><div className="rounded-md bg-muted p-2"><KeyRound size={14} /></div><div className="min-w-0 flex-1"><p className="truncate text-sm font-medium">{client.nome}</p><p className="truncate text-xs text-muted-foreground">{client.account_name} · {client.client_id}</p><p className="text-xs text-muted-foreground">Último uso: {formatDate(client.last_used_at)}</p></div><Badge value={client.status} /></div>)}{!clientSystems.length && <p className="text-sm text-muted-foreground">Nenhum sistema cliente cadastrado.</p>}</div></CardContent></Card></div>
     </div>
   );
 }
+function ManagementMetric({ label, value, detail, icon, tone }: { label: string; value: number | string; detail: string; icon: React.ReactNode; tone: "blue" | "green" | "amber" | "red" }) {
+  const colors = { blue: "bg-blue-50 text-blue-700", green: "bg-emerald-50 text-emerald-700", amber: "bg-amber-50 text-amber-700", red: "bg-red-50 text-red-700" };
+  return <Card><CardContent className="p-5"><div className="flex items-start justify-between gap-3"><div><p className="text-xs font-medium text-muted-foreground">{label}</p><p className="mt-2 text-3xl font-semibold tracking-tight">{value}</p><p className="mt-1 text-xs text-muted-foreground">{detail}</p></div><div className={`rounded-lg p-2.5 ${colors[tone]}`}>{icon}</div></div></CardContent></Card>;
+}
+function ManagementHealth({ icon, label, value, warning }: { icon: React.ReactNode; label: string; value: number | string; warning: boolean }) { return <div className="flex items-center gap-3"><div className={`rounded-md p-2 ${warning ? "bg-amber-100 text-amber-700" : "bg-emerald-100 text-emerald-700"}`}>{icon}</div><span className="flex-1 text-sm">{label}</span><strong className={warning ? "text-amber-700" : "text-emerald-700"}>{value}</strong></div>; }
 function Metric({ label, value, icon }: { label: string; value: number; icon: React.ReactNode }) {
   return (
     <Card>
@@ -239,8 +233,10 @@ function Metric({ label, value, icon }: { label: string; value: number; icon: Re
   );
 }
 
-function DataView({ view, data, session, loading, onRefresh, onError }: { view: View; data: { orders: Order[]; stations: Station[]; operators: Operator[]; events: Event[]; clients: ApiClient[] }; session: Session; loading: boolean; onRefresh: () => void; onError: (value: string | null) => void }) {
+function DataView({ view, data, session, loading, onRefresh, onError }: { view: View; data: BackofficeData; session: Session; loading: boolean; onRefresh: () => void; onError: (value: string | null) => void }) {
+  if (view === "accounts") return <PlatformAccountsPanel session={session} />;
   if (view === "settings") return <div className="space-y-6"><PageHeader title="Configurações da plataforma" description="Gerencie os serviços e parâmetros globais da Plataforma Balança." breadcrumbs={[{ label: "Administração" }]} icon={<Mail className="size-6" />} /><PlatformEmailSettingsPanel session={session} /></div>;
+  if (view === "weighings") return <WeighingPanel session={session} />;
   const subtitle = view === "clients" ? "Gerencie os sistemas consumidores e suas credenciais de integração." : "Consulte e administre os registros do tenant com isolamento e RBAC.";
 
   const Icon = view === "clients" ? KeyRound : view === "orders" ? ClipboardList : view === "stations" ? Wifi : view === "operators" ? Users : Activity;
@@ -254,24 +250,32 @@ function DataView({ view, data, session, loading, onRefresh, onError }: { view: 
         icon={<Icon className="size-6" />}
         actions={<Button variant="outline" size="sm" onClick={onRefresh} disabled={loading}><RefreshCw className={loading ? "animate-spin" : ""} size={14} /> Atualizar</Button>}
       />
-      <Card>
-        <CardContent className="p-6">
-          {view === "clients" && <ClientPanel clients={data.clients} session={session} onRefresh={onRefresh} onError={onError} />}
-          {view === "orders" && <OrderTable orders={data.orders} />}
-          {view === "stations" && <StationPanel stations={data.stations} session={session} onRefresh={onRefresh} onError={onError} />}
-          {view === "operators" && <OperatorPanel operators={data.operators} session={session} onRefresh={onRefresh} onError={onError} />}
-          {view === "events" && <EventTable events={data.events} />}
-        </CardContent>
-      </Card>
+      {view === "clients" && <ClientPanel clients={data.clients} session={session} onRefresh={onRefresh} />}
+      {view === "orders" && <OrderTable orders={data.orders} />}
+      {view === "stations" && <StationPanel stations={data.stations} accounts={data.accounts} session={session} onRefresh={onRefresh} onError={onError} />}
+      {view === "operators" && <OperatorPanel operators={data.operators} session={session} onRefresh={onRefresh} onError={onError} />}
+      {view === "events" && <EventTable events={data.events} session={session} onRefresh={onRefresh} />}
     </div>
   );
 }
 
-function ClientPanel({ clients, session, onRefresh, onError }: { clients: ApiClient[]; session: Session; onRefresh: () => void; onError: (value: string | null) => void }) {
-  const [name, setName] = useState(""); const [scopes, setScopes] = useState<string[]>(["orders:write", "events:read"]); const [expires, setExpires] = useState(""); const [credential, setCredential] = useState<NewCredential | null>(null); const [busy, setBusy] = useState(false);
-  async function submit(event: React.FormEvent) { event.preventDefault(); setBusy(true); onError(null); try { const created = await createApiClient(session, { nome: name.trim(), scopes, expires_at: expires ? new Date(`${expires}T23:59:59`).toISOString() : null }); setCredential(created); setName(""); setExpires(""); onRefresh(); } catch (cause) { onError(cause instanceof Error ? cause.message : "Falha ao criar credencial."); } finally { setBusy(false); } }
-  async function rotate(clientId: string) { toast.custom((t) => <div className="flex w-full flex-col gap-3 rounded-xl border bg-background p-4 shadow-lg"><div className="flex items-start gap-3"><RotateCcw className="mt-0.5 size-5 text-amber-500 shrink-0" /><div className="flex-1 space-y-1"><p className="text-sm font-semibold">Rotacionar credencial?</p><p className="text-sm text-muted-foreground">O Client Secret atual entrará em transição por 24h e um novo será gerado.</p></div></div><div className="flex justify-end gap-2 border-t pt-3"><Button variant="outline" size="sm" onClick={() => toast.dismiss(t)}>Cancelar</Button><Button size="sm" className="bg-amber-500 text-white hover:bg-amber-600" onClick={async () => { toast.dismiss(t); try { setCredential(await rotateApiClient(session, clientId)); onRefresh(); } catch (cause) { onError(cause instanceof Error ? cause.message : "Falha ao rotacionar credencial."); } }}>Rotacionar</Button></div></div>); }
-  async function revoke(clientId: string) { toast.custom((t) => <div className="flex w-full flex-col gap-3 rounded-xl border bg-background p-4 shadow-lg"><div className="flex items-start gap-3"><Ban className="mt-0.5 size-5 text-destructive shrink-0" /><div className="flex-1 space-y-1"><p className="text-sm font-semibold">Revogar credencial?</p><p className="text-sm text-muted-foreground">Todas as chamadas que usam esta credencial deixarão de funcionar.</p></div></div><div className="flex justify-end gap-2 border-t pt-3"><Button variant="outline" size="sm" onClick={() => toast.dismiss(t)}>Cancelar</Button><Button variant="destructive" size="sm" onClick={async () => { toast.dismiss(t); try { await revokeApiClient(session, clientId); onRefresh(); } catch (cause) { onError(cause instanceof Error ? cause.message : "Falha ao revogar credencial."); } }}>Revogar</Button></div></div>); }
+function PlatformAccountsPanel({ session }: { session: Session }) {
+  const [accounts, setAccounts] = useState<PlatformAccount[]>([]); const [editing, setEditing] = useState<PlatformAccount | null>(null); const [name, setName] = useState(""); const [status, setStatus] = useState("ATIVA"); const [loading, setLoading] = useState(true); const [busy, setBusy] = useState(false);
+  async function load() { setLoading(true); try { setAccounts(await getPlatformAccounts(session)); } catch (cause) { toast.error(cause instanceof Error ? cause.message : "Falha ao carregar clientes da plataforma."); } finally { setLoading(false); } }
+  useEffect(() => { void load(); }, [session]);
+  function edit(account: PlatformAccount) { setEditing(account); setName(account.nome); setStatus(account.status); }
+  async function save(event: React.FormEvent) { event.preventDefault(); if (!editing) return; setBusy(true); try { const updated = await updatePlatformAccount(session, editing.id, { nome: name.trim(), status }); setAccounts((current) => current.map((item) => item.id === updated.id ? updated : item)); setEditing(null); toast.success("Cliente atualizado com sucesso."); } catch (cause) { toast.error(cause instanceof Error ? cause.message : "Falha ao atualizar cliente."); } finally { setBusy(false); } }
+  const columns: ColumnDef<PlatformAccount>[] = [{ id: "nome", header: "Cliente", accessorKey: "nome" }, { id: "owner_email", header: "Administrador", cell: (_value, row) => <span>{row.owner_email || "—"}</span> }, { id: "owner_nome", header: "Responsável", cell: (_value, row) => <span>{row.owner_nome || "—"}</span> }, { id: "status", header: "Status", cell: (_value, row) => <Badge value={row.status} /> }, { id: "acoes", header: "Ações", cell: (_value, row) => <Button variant="ghost" size="icon-sm" title="Editar cliente" onClick={() => edit(row)}><Pencil size={14} /></Button> }];
+  return <div className="space-y-6"><PageHeader title="Clientes da plataforma" description="Gerencie as contas cadastradas no Portal e seus acessos operacionais." breadcrumbs={[{ label: "Administração" }]} icon={<Boxes className="size-6" />} actions={<Button variant="outline" size="sm" onClick={() => void load()} disabled={loading}><RefreshCw className={loading ? "animate-spin" : ""} size={14} /> Atualizar</Button>} /><DataTable columns={columns} data={accounts} searchable searchPlaceholder="Buscar clientes..." exportFileName="clientes-plataforma" /><Dialog open={Boolean(editing)} onOpenChange={(open) => { if (!open) setEditing(null); }}><DialogContent><DialogHeader><DialogTitle>Editar cliente da plataforma</DialogTitle><DialogDescription>Altere o nome da conta e o status de acesso ao Portal.</DialogDescription></DialogHeader><DialogBody><form id="platform-account-form" onSubmit={save} className="space-y-4"><div className="space-y-1.5"><label className="text-xs font-medium">Nome da conta</label><Input required value={name} onChange={(event) => setName(event.target.value)} /></div><div className="space-y-1.5"><label className="text-xs font-medium">Status</label><select value={status} onChange={(event) => setStatus(event.target.value)} className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm"><option value="ATIVA">Ativa</option><option value="INATIVA">Inativa</option></select></div></form></DialogBody><DialogFooter><Button variant="outline" type="button" onClick={() => setEditing(null)}>Cancelar</Button><Button type="submit" form="platform-account-form" disabled={busy}>{busy ? "Salvando…" : "Salvar alterações"}</Button></DialogFooter></DialogContent></Dialog></div>;
+}
+
+function ClientPanel({ clients, session, onRefresh }: { clients: ApiClient[]; session: Session; onRefresh: () => void }) {
+  const [name, setName] = useState(""); const [scopes, setScopes] = useState<string[]>(["orders:write", "events:read"]); const [expires, setExpires] = useState(""); const [createOpen, setCreateOpen] = useState(false); const [credential, setCredential] = useState<NewCredential | null>(null); const [editing, setEditing] = useState<ApiClient | null>(null); const [editName, setEditName] = useState(""); const [editScopes, setEditScopes] = useState<string[]>([]); const [editExpires, setEditExpires] = useState(""); const [busy, setBusy] = useState(false);
+  async function submit(event: React.FormEvent) { event.preventDefault(); setBusy(true); try { const created = await createApiClient(session, { nome: name.trim(), scopes, expires_at: expires ? new Date(`${expires}T23:59:59`).toISOString() : null }); setCredential(created); setName(""); setExpires(""); setCreateOpen(false); onRefresh(); toast.success("Credencial criada com sucesso."); } catch (cause) { toast.error(cause instanceof Error ? cause.message : "Falha ao criar credencial."); } finally { setBusy(false); } }
+  async function rotate(clientId: string) { toast.custom((t) => <div className="flex w-full flex-col gap-3 rounded-xl border bg-background p-4 shadow-lg"><div className="flex items-start gap-3"><RotateCcw className="mt-0.5 size-5 text-amber-500 shrink-0" /><div className="flex-1 space-y-1"><p className="text-sm font-semibold">Rotacionar credencial?</p><p className="text-sm text-muted-foreground">O Client Secret atual entrará em transição por 24h e um novo será gerado.</p></div></div><div className="flex justify-end gap-2 border-t pt-3"><Button variant="outline" size="sm" onClick={() => toast.dismiss(t)}>Cancelar</Button><Button size="sm" className="bg-amber-500 text-white hover:bg-amber-600" onClick={async () => { toast.dismiss(t); try { setCredential(await rotateApiClient(session, clientId)); onRefresh(); toast.success("Credencial rotacionada com sucesso."); } catch (cause) { toast.error(cause instanceof Error ? cause.message : "Falha ao rotacionar credencial."); } }}>Rotacionar</Button></div></div>); }
+  async function revoke(clientId: string) { toast.custom((t) => <div className="flex w-full flex-col gap-3 rounded-xl border bg-background p-4 shadow-lg"><div className="flex items-start gap-3"><Ban className="mt-0.5 size-5 text-destructive shrink-0" /><div className="flex-1 space-y-1"><p className="text-sm font-semibold">Revogar credencial?</p><p className="text-sm text-muted-foreground">Todas as chamadas que usam esta credencial deixarão de funcionar.</p></div></div><div className="flex justify-end gap-2 border-t pt-3"><Button variant="outline" size="sm" onClick={() => toast.dismiss(t)}>Cancelar</Button><Button variant="destructive" size="sm" onClick={async () => { toast.dismiss(t); try { await revokeApiClient(session, clientId); onRefresh(); toast.success("Credencial revogada."); } catch (cause) { toast.error(cause instanceof Error ? cause.message : "Falha ao revogar credencial."); } }}>Revogar</Button></div></div>); }
+  function startEdit(client: ApiClient) { setEditing(client); setEditName(client.nome); setEditScopes(client.scopes); setEditExpires(client.expires_at ? client.expires_at.slice(0, 10) : ""); }
+  async function saveEdit(event: React.FormEvent) { event.preventDefault(); if (!editing) return; setBusy(true); try { await updateApiClient(session, editing.client_id, { nome: editName.trim(), scopes: editScopes, expires_at: editExpires ? new Date(`${editExpires}T23:59:59`).toISOString() : null }); setEditing(null); onRefresh(); toast.success("Credencial atualizada com sucesso."); } catch (cause) { toast.error(cause instanceof Error ? cause.message : "Falha ao atualizar credencial."); } finally { setBusy(false); } }
 
   const columns: ColumnDef<ApiClient>[] = [
     { id: "nome", header: "Nome", accessorKey: "nome" },
@@ -281,6 +285,7 @@ function ClientPanel({ clients, session, onRefresh, onError }: { clients: ApiCli
     {
       id: "acoes", header: "Ações", cell: (val, row) => (
         <div className="flex items-center gap-2">
+          <Button variant="ghost" size="icon-sm" onClick={() => startEdit(row)} title="Editar dados permitidos"><Pencil size={14} /></Button>
           <Button variant="ghost" size="icon-sm" onClick={() => void rotate(row.client_id)} title="Resetar/rotacionar segredo"><RotateCcw size={14} /></Button>
           {row.status === "ATIVO" && <Button variant="ghost" size="icon-sm" className="text-destructive hover:bg-destructive hover:text-white" onClick={() => void revoke(row.client_id)} title="Revogar"><Ban size={14} /></Button>}
         </div>
@@ -290,8 +295,8 @@ function ClientPanel({ clients, session, onRefresh, onError }: { clients: ApiCli
 
   return (
     <div className="space-y-8">
-      <form onSubmit={submit} className="flex flex-col gap-4 max-w-2xl bg-muted/30 p-4 rounded-lg border">
-        <h3 className="text-sm font-medium">Nova credencial API</h3>
+      <div><Button onClick={() => setCreateOpen(true)}><Plus size={14} className="mr-2" />Nova credencial API</Button></div>
+      <Dialog open={createOpen} onOpenChange={setCreateOpen}><DialogContent className="max-w-2xl p-0"><DialogHeader><DialogTitle>Nova credencial API</DialogTitle><DialogDescription>Defina o nome, os escopos e a expiração da credencial.</DialogDescription></DialogHeader><DialogBody><form id="create-api-client-form" onSubmit={submit} className="space-y-4">
         <div className="grid grid-cols-2 gap-4">
           <div className="space-y-1.5"><label className="text-xs font-medium">Nome do sistema consumidor</label><Input required value={name} onChange={(event) => setName(event.target.value)} placeholder="AgroSaaS produção" /></div>
           <div className="space-y-1.5"><label className="text-xs font-medium">Expiração opcional</label><Input type="date" value={expires} onChange={(event) => setExpires(event.target.value)} /></div>
@@ -302,8 +307,28 @@ function ClientPanel({ clients, session, onRefresh, onError }: { clients: ApiCli
             {SCOPES.map(([scope, label]) => <label key={scope} className="flex items-center gap-2 text-sm"><input type="checkbox" checked={scopes.includes(scope)} onChange={(event) => setScopes((current) => event.target.checked ? [...current, scope] : current.filter((item) => item !== scope))} />{label}</label>)}
           </div>
         </div>
-        <Button type="submit" disabled={busy || !scopes.length} className="w-fit"><Plus size={14} className="mr-2" />{busy ? "Gerando…" : "Gerar credencial"}</Button>
-      </form>
+        </form></DialogBody><DialogFooter><Button type="button" variant="outline" onClick={() => setCreateOpen(false)}>Cancelar</Button><Button type="submit" form="create-api-client-form" disabled={busy || !scopes.length}>{busy ? "Gerando…" : "Gerar credencial"}</Button></DialogFooter></DialogContent></Dialog>
+      <Dialog open={Boolean(editing)} onOpenChange={(open) => { if (!open) setEditing(null); }}>
+        <DialogContent className="max-w-2xl p-0">
+          <DialogHeader>
+            <DialogTitle>Editar credencial</DialogTitle>
+            <DialogDescription>Altere somente nome, escopos e data de expiração. Client ID, segredo, status e auditoria não podem ser alterados aqui.</DialogDescription>
+          </DialogHeader>
+          <DialogBody>
+            <form id="edit-api-client-form" onSubmit={saveEdit} className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1.5"><label className="text-xs font-medium">Nome</label><Input required value={editName} onChange={(event) => setEditName(event.target.value)} /></div>
+                <div className="space-y-1.5"><label className="text-xs font-medium">Expiração opcional</label><Input type="date" value={editExpires} onChange={(event) => setEditExpires(event.target.value)} /></div>
+              </div>
+              <div className="space-y-1.5"><label className="text-xs font-medium">Escopos</label><div className="flex flex-wrap gap-4">{SCOPES.map(([scope, label]) => <label key={scope} className="flex items-center gap-2 text-sm"><input type="checkbox" checked={editScopes.includes(scope)} onChange={(event) => setEditScopes((current) => event.target.checked ? [...current, scope] : current.filter((item) => item !== scope))} />{label}</label>)}</div></div>
+            </form>
+          </DialogBody>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setEditing(null)}>Cancelar</Button>
+            <Button type="submit" form="edit-api-client-form" disabled={busy || !editScopes.length}>{busy ? "Salvando…" : "Salvar alterações"}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
       {credential && <CredentialNotice credential={credential} onClose={() => setCredential(null)} />}
       <DataTable columns={columns} data={clients} searchable searchPlaceholder="Buscar clientes..." exportFileName="clientes" />
     </div>
@@ -330,12 +355,13 @@ function CredentialNotice({ credential, onClose }: { credential: NewCredential; 
   );
 }
 
-function StationPanel({ stations, session, onRefresh, onError }: { stations: Station[]; session: Session; onRefresh: () => void; onError: (value: string | null) => void }) {
-  const [externalId, setExternalId] = useState(""); const [name, setName] = useState(""); const [busy, setBusy] = useState(false);
-  async function submit(event: React.FormEvent) { event.preventDefault(); setBusy(true); try { await createStation(session, { external_id: externalId.trim(), nome: name.trim() }); setExternalId(""); setName(""); onRefresh(); } catch (cause) { onError(cause instanceof Error ? cause.message : "Falha ao criar estação."); } finally { setBusy(false); } }
+function StationPanel({ stations, accounts, session, onRefresh, onError }: { stations: Station[]; accounts: Account[]; session: Session; onRefresh: () => void; onError: (value: string | null) => void }) {
+  const [externalId, setExternalId] = useState(""); const [name, setName] = useState(""); const [accountId, setAccountId] = useState(""); const [createOpen, setCreateOpen] = useState(false); const [busy, setBusy] = useState(false);
+  async function submit(event: React.FormEvent) { event.preventDefault(); setBusy(true); try { await createStation(session, { external_id: externalId.trim(), nome: name.trim(), conta_id: accountId }); setExternalId(""); setName(""); setAccountId(""); setCreateOpen(false); onRefresh(); toast.success("Estação criada com sucesso."); } catch (cause) { toast.error(cause instanceof Error ? cause.message : "Falha ao criar estação."); } finally { setBusy(false); } }
 
   const columns: ColumnDef<Station>[] = [
     { id: "nome", header: "Nome", accessorKey: "nome" },
+    { id: "conta_nome", header: "Cliente", cell: (val, row) => <span title={row.conta_id}>{row.conta_nome || "—"}</span> },
     { id: "external_id", header: "Identificador", accessorKey: "external_id", cell: (val, row) => <span className="text-muted-foreground">{row.external_id}</span> },
     { id: "status", header: "Status", cell: (val, row) => <Badge value={row.status} /> },
     { id: "activation_code", header: "Código de ativação", cell: (val, row) => <span className="font-mono text-sm">{row.activation_code || "—"}</span> }
@@ -343,19 +369,19 @@ function StationPanel({ stations, session, onRefresh, onError }: { stations: Sta
 
   return (
     <div className="space-y-8">
-      <form onSubmit={submit} className="flex items-end gap-4 bg-muted/30 p-4 rounded-lg border flex-wrap">
-        <div className="space-y-1.5 flex-1 min-w-[200px]"><label className="text-xs font-medium">Identificador externo</label><Input required value={externalId} onChange={(event) => setExternalId(event.target.value)} placeholder="balanca-01" /></div>
-        <div className="space-y-1.5 flex-1 min-w-[200px]"><label className="text-xs font-medium">Nome</label><Input required value={name} onChange={(event) => setName(event.target.value)} placeholder="Balança principal" /></div>
-        <Button type="submit" disabled={busy}><Plus size={14} className="mr-2" />{busy ? "Salvando…" : "Cadastrar estação"}</Button>
-      </form>
+      <div><Button onClick={() => setCreateOpen(true)} disabled={!accounts.length}><Plus size={14} className="mr-2" />Nova estação</Button>{!accounts.length && <p className="mt-2 text-xs text-muted-foreground">Nenhum cliente disponível para associação.</p>}</div>
+      <Dialog open={createOpen} onOpenChange={setCreateOpen}><DialogContent className="max-w-2xl p-0"><DialogHeader><DialogTitle>Nova estação</DialogTitle><DialogDescription>Associe a estação a um cliente e informe seus dados operacionais.</DialogDescription></DialogHeader><DialogBody><form id="create-station-form" onSubmit={submit} className="space-y-4">
+        <div className="space-y-1.5"><label className="text-xs font-medium">Cliente</label><select required value={accountId} onChange={(event) => setAccountId(event.target.value)} className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm"><option value="">Selecione o cliente</option>{accounts.map((account) => <option key={account.id} value={account.id}>{account.nome}</option>)}</select></div>
+        <div className="grid grid-cols-2 gap-4"><div className="space-y-1.5"><label className="text-xs font-medium">Identificador externo</label><Input required value={externalId} onChange={(event) => setExternalId(event.target.value)} placeholder="balanca-01" /></div><div className="space-y-1.5"><label className="text-xs font-medium">Nome</label><Input required value={name} onChange={(event) => setName(event.target.value)} placeholder="Balança principal" /></div></div>
+      </form></DialogBody><DialogFooter><Button type="button" variant="outline" onClick={() => setCreateOpen(false)}>Cancelar</Button><Button type="submit" form="create-station-form" disabled={busy || !accountId}>{busy ? "Salvando…" : "Cadastrar estação"}</Button></DialogFooter></DialogContent></Dialog>
       <DataTable columns={columns} data={stations} searchable searchPlaceholder="Buscar estações..." exportFileName="estacoes" />
     </div>
   );
 }
 
 function OperatorPanel({ operators, session, onRefresh, onError }: { operators: Operator[]; session: Session; onRefresh: () => void; onError: (value: string | null) => void }) {
-  const [code, setCode] = useState(""); const [name, setName] = useState(""); const [pin, setPin] = useState(""); const [busy, setBusy] = useState(false);
-  async function submit(event: React.FormEvent) { event.preventDefault(); setBusy(true); try { await createOperator(session, { codigo: code.trim(), nome_exibicao: name.trim(), pin }); setCode(""); setName(""); setPin(""); onRefresh(); } catch (cause) { onError(cause instanceof Error ? cause.message : "Falha ao criar operador."); } finally { setBusy(false); } }
+  const [code, setCode] = useState(""); const [name, setName] = useState(""); const [pin, setPin] = useState(""); const [createOpen, setCreateOpen] = useState(false); const [busy, setBusy] = useState(false);
+  async function submit(event: React.FormEvent) { event.preventDefault(); setBusy(true); try { await createOperator(session, { codigo: code.trim(), nome_exibicao: name.trim(), pin }); setCode(""); setName(""); setPin(""); setCreateOpen(false); onRefresh(); toast.success("Operador criado com sucesso."); } catch (cause) { toast.error(cause instanceof Error ? cause.message : "Falha ao criar operador."); } finally { setBusy(false); } }
   async function revoke(id: string) { toast.custom((t) => <div className="flex w-full flex-col gap-3 rounded-xl border bg-background p-4 shadow-lg"><div className="flex items-start gap-3"><Ban className="mt-0.5 size-5 text-destructive shrink-0" /><div className="flex-1 space-y-1"><p className="text-sm font-semibold">Revogar operador?</p><p className="text-sm text-muted-foreground">Este operador não poderá mais acessar o sistema.</p></div></div><div className="flex justify-end gap-2 border-t pt-3"><Button variant="outline" size="sm" onClick={() => toast.dismiss(t)}>Cancelar</Button><Button variant="destructive" size="sm" onClick={async () => { toast.dismiss(t); try { await revokeOperator(session, id); onRefresh(); } catch (cause) { onError(cause instanceof Error ? cause.message : "Falha ao revogar operador."); } }}>Revogar</Button></div></div>); }
 
   const columns: ColumnDef<Operator>[] = [
@@ -368,12 +394,12 @@ function OperatorPanel({ operators, session, onRefresh, onError }: { operators: 
 
   return (
     <div className="space-y-8">
-      <form onSubmit={submit} className="flex items-end gap-4 bg-muted/30 p-4 rounded-lg border flex-wrap">
+      <div><Button onClick={() => setCreateOpen(true)}><Plus size={14} className="mr-2" />Novo operador</Button></div>
+      <Dialog open={createOpen} onOpenChange={setCreateOpen}><DialogContent className="max-w-2xl p-0"><DialogHeader><DialogTitle>Novo operador</DialogTitle><DialogDescription>Cadastre o operador que poderá acessar as estações.</DialogDescription></DialogHeader><DialogBody><form id="create-operator-form" onSubmit={submit} className="space-y-4">
         <div className="space-y-1.5 flex-1 min-w-[150px]"><label className="text-xs font-medium">Código</label><Input required value={code} onChange={(event) => setCode(event.target.value)} placeholder="OP-001" /></div>
         <div className="space-y-1.5 flex-1 min-w-[200px]"><label className="text-xs font-medium">Nome</label><Input required value={name} onChange={(event) => setName(event.target.value)} placeholder="Nome do operador" /></div>
         <div className="space-y-1.5 flex-1 min-w-[150px]"><label className="text-xs font-medium">PIN</label><Input required minLength={4} value={pin} onChange={(event) => setPin(event.target.value)} placeholder="••••" /></div>
-        <Button type="submit" disabled={busy}><Plus size={14} className="mr-2" />{busy ? "Salvando…" : "Cadastrar operador"}</Button>
-      </form>
+        </form></DialogBody><DialogFooter><Button type="button" variant="outline" onClick={() => setCreateOpen(false)}>Cancelar</Button><Button type="submit" form="create-operator-form" disabled={busy}>{busy ? "Salvando…" : "Cadastrar operador"}</Button></DialogFooter></DialogContent></Dialog>
       <DataTable columns={columns} data={operators} searchable searchPlaceholder="Buscar operadores..." exportFileName="operadores" />
     </div>
   );
@@ -390,13 +416,74 @@ function OrderTable({ orders, hideExport }: { orders: Order[], hideExport?: bool
   return <DataTable columns={columns} data={orders} searchable={!hideExport} exportFileName={hideExport ? undefined : "ordens"} />;
 }
 
-function EventTable({ events }: { events: Event[] }) {
+function EventTable({ events, session, onRefresh }: { events: Event[]; session: Session; onRefresh: () => void }) {
   const columns: ColumnDef<Event>[] = [
     { id: "event_type", header: "Evento", cell: (val, row) => <div><strong>{row.event_type}</strong><br /><small className="text-muted-foreground">{row.event_version}</small></div> },
     { id: "idempotency_key", header: "Chave", accessorKey: "idempotency_key", cell: (val, row) => <span className="text-muted-foreground font-mono text-xs">{row.idempotency_key}</span> },
     { id: "status", header: "Status", cell: (val, row) => <Badge value={row.status} /> },
     { id: "attempts", header: "Tentativas", accessorKey: "attempts" },
-    { id: "created_at", header: "Criado em", cell: (val, row) => <span className="text-muted-foreground">{formatDate(row.created_at)}</span> }
+    { id: "next_attempt_at", header: "Próximo retry", cell: (_value, row) => <span className="text-muted-foreground">{row.next_attempt_at ? formatDate(row.next_attempt_at) : row.delivered_at ? `Entregue ${formatDate(row.delivered_at)}` : "Imediato"}</span> },
+    { id: "last_error", header: "Último erro", cell: (_value, row) => <span className="max-w-64 truncate text-destructive" title={row.last_error || undefined}>{row.last_error || "—"}</span> },
+    { id: "created_at", header: "Criado em", cell: (val, row) => <span className="text-muted-foreground">{formatDate(row.created_at)}</span> },
+    { id: "acoes", header: "Ações", cell: (_value, row) => <Button variant="outline" size="sm" onClick={async () => { try { await replayEvent(session, row.id); onRefresh(); toast.success("Evento reenfileirado."); } catch (cause) { toast.error(cause instanceof Error ? cause.message : "Falha ao reenfileirar evento."); } }}>Replay</Button> }
   ];
   return <DataTable columns={columns} data={events} searchable searchPlaceholder="Buscar eventos..." exportFileName="eventos" />;
+}
+
+function WeighingPanel({ session }: { session: Session }) {
+  const [items, setItems] = useState<Weighing[]>([]);
+  const [status, setStatus] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [selected, setSelected] = useState<Weighing | null>(null);
+  const [targetOrder, setTargetOrder] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  async function load() {
+    setLoading(true);
+    try { setItems((await getAdminWeighings(session, status || undefined)).items); }
+    catch (cause) { toast.error(cause instanceof Error ? cause.message : "Falha ao carregar pesagens."); }
+    finally { setLoading(false); }
+  }
+  useEffect(() => { void load(); }, [session, status]);
+
+  async function reconcile(nextStatus: string) {
+    if (!selected) return;
+    setBusy(true);
+    try {
+      await reconcileAdminWeighing(session, selected.id, { status: nextStatus, ordem_id: targetOrder.trim() || null });
+      setSelected(null); setTargetOrder(""); await load();
+      toast.success("Reconciliação atualizada.");
+    } catch (cause) { toast.error(cause instanceof Error ? cause.message : "Falha ao reconciliar pesagem."); }
+    finally { setBusy(false); }
+  }
+
+  const columns: ColumnDef<Weighing>[] = [
+    { id: "captured_at", header: "Capturada em", cell: (_value, row) => <span className="text-muted-foreground">{formatDate(row.captured_at)}</span> },
+    { id: "local_id", header: "ID local", accessorKey: "local_id" },
+    { id: "etapa", header: "Etapa", accessorKey: "etapa" },
+    { id: "peso_aferido_kg", header: "Peso aferido", cell: (_value, row) => <span>{row.peso_aferido_kg} kg</span> },
+    { id: "ordem_id", header: "Ordem", cell: (_value, row) => <span className="font-mono text-xs">{row.ordem_id || "Sem ordem"}</span> },
+    { id: "reconciliation_status", header: "Reconciliação", cell: (_value, row) => <Badge value={row.reconciliation_status} /> },
+    { id: "acoes", header: "Ações", cell: (_value, row) => <Button variant="outline" size="sm" onClick={() => { setSelected(row); setTargetOrder(row.ordem_id || ""); }}>Reconciliar</Button> },
+  ];
+
+  return <div className="space-y-6">
+    <div className="flex items-center gap-3">
+      <select value={status} onChange={(event) => setStatus(event.target.value)} className="h-9 rounded-md border border-input bg-background px-3 text-sm">
+        <option value="">Todas as pesagens</option><option value="NAO_RECONCILIADA">Não reconciliadas</option><option value="PENDENTE_RECONCILIACAO">Pendentes</option><option value="VINCULADA">Vinculadas</option><option value="REJEITADA">Rejeitadas</option>
+      </select>
+      <Button variant="outline" size="sm" onClick={() => void load()} disabled={loading}><RefreshCw className={loading ? "animate-spin" : ""} size={14} /> Atualizar</Button>
+    </div>
+    <DataTable columns={columns} data={items} searchable searchPlaceholder="Buscar pesagens..." exportFileName="pesagens" />
+    <Dialog open={Boolean(selected)} onOpenChange={(open) => { if (!open) setSelected(null); }}>
+      <DialogContent>
+        <DialogHeader><DialogTitle>Reconciliar pesagem</DialogTitle><DialogDescription>Pesagem {selected?.local_id}. A captura física permanece imutável; altere somente o vínculo operacional.</DialogDescription></DialogHeader>
+        <DialogBody className="space-y-4">
+          <div className="rounded-md bg-muted p-3 text-sm"><strong>{selected?.peso_aferido_kg} kg</strong> · {selected?.etapa} · {formatDate(selected?.captured_at || null)}</div>
+          <div className="space-y-1.5"><label className="text-xs font-medium">ID da ordem existente (opcional)</label><Input value={targetOrder} onChange={(event) => setTargetOrder(event.target.value)} placeholder="UUID da ordem" /></div>
+        </DialogBody>
+        <DialogFooter className="flex-wrap"><Button variant="outline" onClick={() => setSelected(null)}>Cancelar</Button><Button variant="destructive" disabled={busy} onClick={() => void reconcile("REJEITADA")}>Rejeitar</Button><Button variant="outline" disabled={busy} onClick={() => void reconcile("PENDENTE_RECONCILIACAO")}>Manter pendente</Button><Button disabled={busy || !targetOrder.trim()} onClick={() => void reconcile("VINCULADA")}>Vincular</Button></DialogFooter>
+      </DialogContent>
+    </Dialog>
+  </div>;
 }

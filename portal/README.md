@@ -18,7 +18,7 @@ na Plataforma Balança.
 Com o serviço Balança em `http://localhost:8010`:
 
 ```bash
-cd /opt/lampp/htdocs/balanca-platform
+cd /opt/lampp/htdocs/tara
 pnpm portal:dev
 ```
 

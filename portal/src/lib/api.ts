@@ -26,6 +26,10 @@ export interface NewCredential {
 }
 
 export interface PortalMe { user_id: string; account_id: string; tenant_id: string; nome_conta: string; nome_exibicao: string; email: string; role: string; }
+export interface WebhookDestination { target_url: string; status: string; event_types: string[]; configured: boolean; updated_at: string; max_attempts: number; retry_base_seconds: number; }
+export interface PortalOrder { id: string; sistema_cliente: string; referencia_externa: string; subject_type: string; tipo_pesagem: string; status: string; peso_liquido_kg: string | number | null; created_at: string; concluida_em: string | null; }
+export interface PortalWeighing { id: string; ordem_id: string | null; local_id: string; etapa: string; peso_aferido_kg: string | number; captured_at: string; reconciliation_status: string; }
+export interface PortalUser { id: string; email: string; nome_exibicao: string; role: string; status: string; created_at: string; }
 
 interface AuthResponse {
   access_token: string;
@@ -131,6 +135,12 @@ export async function revokeApiClient(session: Session, clientId: string) {
 export async function getPortalMe(session: Session) { return apiFetch<PortalMe>("/v1/portal/me", session); }
 export async function updatePortalMe(session: Session, payload: { nome_conta: string; nome_exibicao: string }) { return apiFetch<PortalMe>("/v1/portal/me", session, { method: "PUT", body: JSON.stringify(payload) }); }
 export async function sendApiKeyRecoveryEmail(session: Session, clientId: string) { return apiFetch<{ message: string }>(`/v1/portal/api-clients/${encodeURIComponent(clientId)}/send-recovery-email`, session, { method: "POST" }); }
+export async function getWebhookDestination(session: Session) { return apiFetch<WebhookDestination>("/v1/portal/webhook", session); }
+export async function saveWebhookDestination(session: Session, payload: { target_url: string; hmac_secret: string | null; event_types: string[]; max_attempts: number; retry_base_seconds: number }) { return apiFetch<WebhookDestination>("/v1/portal/webhook", session, { method: "PUT", body: JSON.stringify(payload) }); }
+export async function listPortalOrders(session: Session) { return apiFetch<PortalOrder[]>("/v1/portal/orders", session); }
+export async function listPortalWeighings(session: Session) { return apiFetch<PortalWeighing[]>("/v1/portal/weighings", session); }
+export async function listPortalUsers(session: Session) { return apiFetch<PortalUser[]>("/v1/portal/users", session); }
+export async function updatePortalUser(session: Session, userId: string, payload: { role: string; status: string }) { return apiFetch<PortalUser>(`/v1/portal/users/${encodeURIComponent(userId)}`, session, { method: "PUT", body: JSON.stringify(payload) }); }
 
 export function formatDate(value: string | null): string {
   return value ? new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeStyle: "short" }).format(new Date(value)) : "—";

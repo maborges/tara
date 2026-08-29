@@ -105,7 +105,7 @@ self.__SERVER_FILES_MANIFEST={
         "transform": "lodash/{{member}}"
       }
     },
-    "outputFileTracingRoot": "/opt/lampp/htdocs/balanca-platform",
+    "outputFileTracingRoot": "/opt/lampp/htdocs/tara",
     "enablePrerenderSourceMaps": true,
     "cacheComponents": false,
     "cacheLife": {
@@ -320,14 +320,14 @@ self.__SERVER_FILES_MANIFEST={
     "htmlLimitedBots": "[\\w-]+-Google|Google-[\\w-]+|Chrome-Lighthouse|Slurp|DuckDuckBot|baiduspider|yandex|sogou|bitlybot|tumblr|vkShare|quora link preview|redditbot|ia_archiver|Bingbot|BingPreview|applebot|facebookexternalhit|facebookcatalog|Twitterbot|LinkedInBot|Slackbot|Discordbot|WhatsApp|SkypeUriPreview|Yeti|googleweblight",
     "bundlePagesRouterDependencies": false,
     "configFileName": "next.config.ts",
-    "repoRoot": "/opt/lampp/htdocs/balanca-platform",
+    "repoRoot": "/opt/lampp/htdocs/tara",
     "turbopack": {
-      "root": "/opt/lampp/htdocs/balanca-platform"
+      "root": "/opt/lampp/htdocs/tara"
     },
     "distDirRoot": ".next",
     "supportsImmutableAssets": false
   },
-  "appDir": "/opt/lampp/htdocs/balanca-platform/portal",
+  "appDir": "/opt/lampp/htdocs/tara/portal",
   "relativeAppDir": "portal",
   "files": [
     ".next/package.json",

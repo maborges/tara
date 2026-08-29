@@ -19,6 +19,59 @@ class ClientOut(ClientIn):
     status: str
 
 
+class AccountOut(BaseModel):
+    id: uuid.UUID
+    nome: str
+    status: str
+
+
+class PlatformAccountOut(AccountOut):
+    tenant_id: uuid.UUID
+    owner_email: str | None = None
+    owner_nome: str | None = None
+
+
+class PlatformAccountUpdateIn(BaseModel):
+    nome: str = Field(min_length=2, max_length=160)
+    status: str = Field(pattern="^(ATIVA|INATIVA)$")
+
+
+class PlatformDashboardOut(BaseModel):
+    accounts_total: int
+    accounts_by_status: dict[str, int] = Field(default_factory=dict)
+    clients_total: int
+    api_keys_active: int
+    orders_total: int
+    orders_open: int
+    orders_completed: int
+    weighings_total: int
+    weighings_pending: int
+    stations_total: int
+    stations_active: int
+    operators_active: int
+    events_total: int
+    events_pending: int
+    client_systems: list[dict[str, Any]] = Field(default_factory=list)
+
+
+class WebhookDestinationIn(BaseModel):
+    target_url: str = Field(min_length=8, max_length=500)
+    hmac_secret: str | None = Field(default=None, min_length=32, max_length=255)
+    event_types: list[str] = Field(default_factory=lambda: ["balanca.pesagem.concluida.v1"])
+    max_attempts: int = Field(default=8, ge=1, le=50)
+    retry_base_seconds: int = Field(default=2, ge=1, le=3600)
+
+
+class WebhookDestinationOut(BaseModel):
+    target_url: str
+    status: str
+    event_types: list[str]
+    configured: bool = True
+    updated_at: datetime
+    max_attempts: int
+    retry_base_seconds: int
+
+
 class LoginIn(BaseModel):
     login: str = Field(min_length=1, max_length=120)
     password: str = Field(min_length=8, max_length=128)
@@ -122,7 +175,28 @@ class PortalMeOut(BaseModel):
     role: str
 
 
+class PortalUserOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: uuid.UUID
+    email: str
+    nome_exibicao: str
+    role: str
+    status: str
+    created_at: datetime
+
+
+class PortalUserUpdateIn(BaseModel):
+    role: Literal["OWNER", "ADMIN", "MEMBER"]
+    status: Literal["ATIVO", "INATIVO"]
+
+
 class ApiClientIn(BaseModel):
+    nome: str = Field(min_length=1, max_length=160)
+    scopes: list[str] = Field(min_length=1, max_length=30)
+    expires_at: datetime | None = None
+
+
+class ApiClientUpdateIn(BaseModel):
     nome: str = Field(min_length=1, max_length=160)
     scopes: list[str] = Field(min_length=1, max_length=30)
     expires_at: datetime | None = None
@@ -227,11 +301,14 @@ class OrderOut(BaseModel):
 class StationIn(BaseModel):
     external_id: str = Field(min_length=1, max_length=120)
     nome: str = Field(min_length=1, max_length=160)
+    conta_id: uuid.UUID | None = None
 
 
 class StationOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: uuid.UUID
+    conta_id: uuid.UUID
+    conta_nome: str | None = None
     external_id: str
     nome: str
     activation_code: str | None
@@ -267,7 +344,7 @@ class OperatorOut(BaseModel):
 
 
 class WeighingIn(BaseModel):
-    ordem_id: uuid.UUID
+    ordem_id: uuid.UUID | None = None
     local_id: str = Field(min_length=1, max_length=120)
     etapa: str = Field(min_length=1, max_length=30)
     peso_aferido_kg: Decimal = Field(gt=Decimal("0"))
@@ -277,12 +354,16 @@ class WeighingIn(BaseModel):
     operador_id: uuid.UUID | None = None
     leitura_bruta: dict[str, Any] | None = None
     captured_at: datetime | None = None
+    direcao_veiculo: Literal["ENTRADA", "SAIDA"] | None = None
+    natureza_mercadoria: Literal["ENTRADA", "SAIDA", "NEUTRA"] | None = None
+    tipo_operacao: str | None = Field(default=None, max_length=60)
+    contexto: dict[str, Any] = Field(default_factory=dict)
 
 
 class WeighingOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: uuid.UUID
-    ordem_id: uuid.UUID
+    ordem_id: uuid.UUID | None
     local_id: str
     etapa: str
     peso_aferido_kg: Decimal
@@ -290,6 +371,22 @@ class WeighingOut(BaseModel):
     peso_tara_kg: Decimal | None
     captured_via: str
     captured_at: datetime
+    reconciliation_status: str
+    direcao_veiculo: str | None
+    natureza_mercadoria: str | None
+    tipo_operacao: str | None
+    contexto: dict[str, Any]
+
+
+class WeighingReconciliationIn(BaseModel):
+    ordem_id: uuid.UUID | None = None
+    status: Literal["VINCULADA", "CRIAR_ORDEM", "PENDENTE_RECONCILIACAO", "REJEITADA"]
+    ordem: OrderIn | None = None
+
+
+class WeighingPageOut(BaseModel):
+    items: list[WeighingOut]
+    next_cursor: str | None = None
 
 
 class EventOut(BaseModel):
@@ -302,6 +399,19 @@ class EventOut(BaseModel):
     status: str
     payload: dict[str, Any]
     attempts: int
+    created_at: datetime
+    updated_at: datetime
+    next_attempt_at: datetime | None = None
+    delivered_at: datetime | None = None
+    last_error: str | None = None
+
+
+class EventReplayAuditOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: uuid.UUID
+    actor_user_id: uuid.UUID
+    previous_status: str
+    reason: str
     created_at: datetime
 
 

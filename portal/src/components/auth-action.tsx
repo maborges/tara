@@ -117,7 +117,7 @@ export function ResetPassword() {
 function AuthCard({ title, description, children }: { title: string; description: string; children: React.ReactNode }) {
   return (
     <div className="flex min-h-screen bg-muted/30">
-      <div className="relative hidden flex-1 flex-col justify-center items-center p-12 overflow-hidden lg:flex">
+      <div className="relative flex-1 flex flex-col justify-center items-center p-12 overflow-hidden">
         <div className="absolute inset-0 bg-cover bg-center z-0" style={{ backgroundImage: "url('/login-bg.jpg')" }} />
         <div className="absolute inset-0 bg-primary/80 mix-blend-multiply z-0" />
         <div className="absolute inset-0 bg-gradient-to-t from-primary/95 via-primary/60 to-transparent z-0" />
@@ -131,7 +131,7 @@ function AuthCard({ title, description, children }: { title: string; description
           </div>
         </div>
       </div>
-      <div className="flex-1 flex items-center justify-center p-6 sm:p-12 bg-background relative z-10 shadow-2xl">
+      <div className="flex-1 flex items-center justify-center p-12 bg-background relative z-10 shadow-2xl">
         <Card className="w-full max-w-md shadow-xl border-none">
           <CardHeader>
             <CardTitle className="text-2xl">{title}</CardTitle>

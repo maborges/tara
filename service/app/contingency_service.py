@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from .contingency import package_hash, verify_package_signature
 from .models import ContingenciaItem, ContingenciaLote, Estacao, Pesagem
 from .schemas import ContingencyPackageIn, WeighingIn
-from .service import complete_weighing, create_order
+from .operation import complete_weighing, create_order
 
 
 async def import_contingency_package(session: AsyncSession, tenant_id: uuid.UUID, package: ContingencyPackageIn):

@@ -13,7 +13,7 @@ from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .config import get_settings
-from .db import get_session, set_tenant_context
+from .db import get_session, set_platform_admin_context, set_tenant_context
 from .models import AdministradorPlataforma, ApiClient, ApiClientSecret, Papel, PapelPermissao, Permissao, PortalUser, Usuario, UsuarioPapel
 
 
@@ -32,8 +32,14 @@ BACKOFFICE_PERMISSIONS = {
 INTEGRATION_SCOPES = {
     "clients:write",
     "orders:write",
+    "orders:read",
+    "weighings:read",
+    "weighings:reconcile",
     "events:read",
     "stations:activate",
+    "webhooks:read",
+    "webhooks:manage",
+    "webhooks:replay",
 }
 
 
@@ -160,6 +166,7 @@ async def require_platform_admin(
     if admin is None:
         raise HTTPException(status_code=403, detail="Administrador da plataforma necessário")
     await set_tenant_context(session, str(admin.tenant_id))
+    await set_platform_admin_context(session, str(admin.usuario_id))
     return session, admin
 
 

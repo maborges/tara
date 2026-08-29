@@ -29,7 +29,7 @@ internos da Balança nem acessar o banco dela.
   - `TARA_SERVICE_CLIENT_ID`;
   - `TARA_SERVICE_CLIENT_SECRET`;
 - contratos locais em `services/api/integracoes/balanca/`;
-- documentação principal em `farm/docs/MANUAL_BALANCA.md` e
+- documentação principal em `farm/docs/MANUAL_TARA.md` e
   `farm/docs/IMPLANTACAO_TARA_CLIENTE.md`.
 
 ## Correção mais recente
@@ -71,37 +71,47 @@ quando instalado.
 1. O backoffice visual inicial foi criado em `backoffice/`, com login JWT e
    consultas de ordens, estações, operadores e outbox. Ainda faltam os fluxos
    de criação/edição e importação visual de contingência.
-2. `docs/MANUAL_BALANCA.md` explica a operação e deve documentar também o
+2. `docs/MANUAL_TARA.md` explica a operação e deve documentar também o
    acesso ao backoffice visual em `http://localhost:3004`.
 3. O manual principal ainda deve ganhar um bloco explícito para iniciar o
    worker Observer/outbox:
 
    ```bash
-   cd /opt/lampp/htdocs/balanca-platform/service
+   cd /opt/lampp/htdocs/tara/service
    ./.venv/bin/python run_worker.py
    ```
 
-4. Ainda é necessário implementar/documentar o endpoint de entrada no AgroSaaS
-   para receber os envelopes enviados pelo outbox da Plataforma Balança e
-   convertê-los em eventos internos. A normalização dos subscribers já está
-   preparada, mas a entrega HTTP completa precisa ser validada.
-5. O diretório `balanca-platform` possui um `.git` próprio, ainda sem commits.
+4. A entrega HTTP do outbox foi implementada e validada no AgroSaaS. Continua
+   sendo necessário executar a migração no ambiente compartilhado e validar o
+   fluxo E2E contra uma instância TARA real, incluindo retry após falha de
+   processamento.
+5. O diretório `tara` possui um `.git` próprio, ainda sem commits.
 
 ## Arquivos de referência
 
 - `README.md` — visão geral da plataforma;
 - `service/docs/MANUAL_OPERACAO.md` — operação do serviço;
-- `docs/MANUAL_BALANCA.md` no AgroSaaS — manual integrado;
-- `docs/architecture/adr-balanca-platform.md` no AgroSaaS — decisão arquitetural;
+- `docs/MANUAL_TARA.md` no AgroSaaS — manual integrado;
+- `docs/architecture/adr-tara.md` no AgroSaaS — decisão arquitetural;
 - `service/tests/test_service_e2e.py` — fluxo E2E do serviço;
 - `service/tests/test_contingency_import.py` — contingência por pendrive.
+
+## Entrega HTTP retomada
+
+O endpoint do AgroSaaS foi implementado em
+`farm/services/api/integracoes/balanca/webhook_router.py`, com assinatura HMAC,
+janela de timestamp, validação do envelope versionado, deduplicação durável por
+`event_id` e publicação nos subscribers internos. A migração
+`20260828_balanca_inbound_events.py` cria o registro de recebimento protegido
+por RLS. O teste de contrato está em
+`farm/services/api/tests/unit/integracoes/test_balanca_webhook_contract.py`.
 
 ## Regra para continuar
 
 Antes de alterar código, verificar os dois repositórios/workspaces:
 
 - AgroSaaS: `/opt/lampp/htdocs/farm`;
-- Plataforma Balança: `/opt/lampp/htdocs/balanca-platform`.
+- Plataforma Balança: `/opt/lampp/htdocs/tara`.
 
 Não restaurar automaticamente o módulo legado. A próxima etapa recomendada é
 fechar o contrato de entrega de eventos entre o worker da Balança e o endpoint

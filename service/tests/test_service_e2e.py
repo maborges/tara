@@ -164,8 +164,10 @@ async def test_standalone_service_order_station_weighing_observer_flow():
         )
         assert response.status_code == 200, response.text
         rotated_secret = response.json()["client_secret"]
+        # O segredo anterior permanece válido durante a janela de transição
+        # documentada; o novo segredo também deve autenticar normalmente.
         response = await client.get("/v1/events", headers=integration_headers)
-        assert response.status_code == 401, response.text
+        assert response.status_code == 200, response.text
         rotated_headers = {**integration_headers, "X-Balanca-Client-Secret": rotated_secret}
         response = await client.get("/v1/events", headers=rotated_headers)
         assert response.status_code == 200, response.text

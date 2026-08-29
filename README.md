@@ -4,7 +4,7 @@ Projeto independente de pesagem, estações offline, Bridge de hardware,
 backoffice, contingência por pendrive e APIs para qualquer aplicação cliente.
 
 ```text
-balanca-platform/
+tara/
 ├── service/     API, banco, migrations e testes
 ├── backoffice/  aplicação web administrativa
 ├── portal/      aplicação web de autoatendimento do cliente
@@ -18,18 +18,21 @@ O AgroSaaS não importa código deste projeto. Ele usa somente as APIs da
 Balança, por meio do adaptador localizado em
 `services/api/integracoes/balanca/`.
 
-## Como iniciar o Backoffice Global e o Portal do Cliente
+Documentação técnica para aplicações cliente:
+[docs/INTEGRACAO_CLIENTE_TECNICA.md](docs/INTEGRACAO_CLIENTE_TECNICA.md).
+
+## Comandos por módulo
 
 O Backoffice Global e o Portal do Cliente são aplicações distintas. O
 Backoffice administra a plataforma e configura o SMTP; o Portal é utilizado
 pelas contas consumidoras para gerar e administrar suas próprias API Keys.
 
-### 1. Preparar banco e serviço
+### Serviço da API (usado pelo Backoffice e pelo Portal)
 
-O banco correto é `farms`; `balanca` é o schema:
+O banco correto é `farms`; `tara` é o schema:
 
 ```bash
-cd /opt/lampp/htdocs/balanca-platform/service
+cd /opt/lampp/htdocs/tara/service
 psql -h 192.168.0.2 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/000_platform_foundation.sql
 psql -h 192.168.0.2 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/001_service_tables.sql
 psql -h 192.168.0.2 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/002_security_identity.sql
@@ -39,7 +42,9 @@ psql -h 192.168.0.2 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/005_c
 psql -h 192.168.0.2 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/006_portal_email_security.sql
 psql -h 192.168.0.2 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/007_platform_email_settings.sql
 psql -h 192.168.0.2 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/008_api_client_secret_rotation.sql
-psql -h 192.168.0.2 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/008_api_client_secret_rotation.sql
+psql -h 192.168.0.2 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/009_rename_balanca_schema.sql
+psql -h 192.168.0.2 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/010_station_account.sql
+psql -h 192.168.0.2 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/011_pesagem_avulsa.sql
 ```
 
 Configure `service/.env`, principalmente `TARA_DATABASE_URL`,
@@ -50,7 +55,7 @@ devem ser colocadas no `.env`.
 Terminal 1 — API:
 
 ```bash
-cd /opt/lampp/htdocs/balanca-platform/service
+cd /opt/lampp/htdocs/tara/service
 ./start_server.sh
 ```
 
@@ -96,12 +101,12 @@ curl http://127.0.0.1:8010/healthz
 curl http://127.0.0.1:8010/readyz
 ```
 
-### 2. Iniciar o Backoffice Global
+### Backoffice Global — frontend e serviço
 
 *** Crie o primeiro administrador apenas uma vez: ***
 
 ```bash
-cd /opt/lampp/htdocs/balanca-platform/service
+cd /opt/lampp/htdocs/tara/service
 export TARA_BOOTSTRAP_TENANT_ID=$(uuidgen)
 ./.venv/bin/python bootstrap_admin.py
 ```
@@ -112,7 +117,7 @@ informado na tela de login.
 Terminal 2 — Backoffice:
 
 ```bash
-cd /opt/lampp/htdocs/balanca-platform
+cd /opt/lampp/htdocs/tara
 pnpm install
 pnpm backoffice:dev
 ```
@@ -126,12 +131,19 @@ Configurações → Configuração de e-mail
 
 Informe o SMTP, salve a configuração no banco e envie um e-mail de teste.
 
-### 3. Iniciar o Portal do Cliente
+### Portal do Cliente — frontend e serviço
 
-Terminal 3 — Portal:
+Se a API ainda não estiver em execução, inicie-a em um terminal:
 
 ```bash
-cd /opt/lampp/htdocs/balanca-platform
+cd /opt/lampp/htdocs/tara/service
+./start_server.sh
+```
+
+Em outro terminal, inicie o Portal:
+
+```bash
+cd /opt/lampp/htdocs/tara
 pnpm portal:dev
 ```
 
@@ -172,7 +184,7 @@ necessário criar uma nova credencial.
 
 ### Ordem recomendada para deixar o backoffice funcional
 
-1. Configure o banco PostgreSQL `farms` e aplique as migrations no schema `balanca`.
+1. Configure o banco PostgreSQL `farms` e aplique as migrations no schema `tara`.
 2. Configure o `.env` da API, incluindo um segredo JWT forte e a origem do
    frontend.
 3. Inicie a API da Balança.
@@ -187,7 +199,7 @@ operadores e acompanhamento do outbox.
 ### Serviço
 
 ```bash
-cd /opt/lampp/htdocs/balanca-platform/service
+cd /opt/lampp/htdocs/tara/service
 python3 -m venv .venv
 ./.venv/bin/pip install -r requirements.txt
 cp .env.example .env
@@ -203,19 +215,19 @@ Se aparecer `address already in use`, já existe um processo ocupando a porta
 porta:
 
 ```bash
-cd /opt/lampp/htdocs/balanca-platform/service
-TARA__PORT=8011 ./start_server.sh
+cd /opt/lampp/htdocs/tara/service
+TARA_PORT=8011 ./start_server.sh
 ```
 
 Ao usar outra porta, aponte o backoffice para ela:
 
 ```bash
-cd /opt/lampp/htdocs/balanca-platform
+cd /opt/lampp/htdocs/tara
 NEXT_PUBLIC_TARA_API_URL=http://localhost:8011 pnpm backoffice:dev
 ```
 
 Depois de gerar o valor, substitua `TARA_JWT_SECRET_SECRET` no arquivo
-`/opt/lampp/htdocs/balanca-platform/service/.env` pelo segredo gerado. Em
+`/opt/lampp/htdocs/tara/service/.env` pelo segredo gerado. Em
 produção, o serviço não inicia com o valor padrão `change-me` nem com uma
 chave curta.
 
@@ -226,7 +238,7 @@ TARA_CORS_ORIGINS=["http://localhost:3004","http://127.0.0.1:3004"]
 ```
 
 O banco `farms` precisa existir antes de iniciar a API. As migrations criam e
-gerenciam o schema `balanca` dentro desse banco; não crie um banco separado
+gerenciam o schema `tara` dentro desse banco; não crie um banco separado
 chamado `balanca`. A URL da aplicação usa o formato SQLAlchemy
 `postgresql+asyncpg://`, mas o cliente `psql` deve receber host, usuário e
 banco separadamente.
@@ -234,7 +246,7 @@ banco separadamente.
 Aplique as migrations:
 
 ```bash
-cd /opt/lampp/htdocs/balanca-platform/service
+cd /opt/lampp/htdocs/tara/service
 psql -h 192.168.0.2 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/000_platform_foundation.sql
 psql -h 192.168.0.2 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/001_service_tables.sql
 psql -h 192.168.0.2 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/002_security_identity.sql
@@ -243,12 +255,16 @@ psql -h 192.168.0.2 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/004_p
 psql -h 192.168.0.2 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/005_customer_portal.sql
 psql -h 192.168.0.2 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/006_portal_email_security.sql
 psql -h 192.168.0.2 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/007_platform_email_settings.sql
+psql -h 192.168.0.2 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/008_api_client_secret_rotation.sql
+psql -h 192.168.0.2 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/009_rename_balanca_schema.sql
+psql -h 192.168.0.2 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/010_station_account.sql
+psql -h 192.168.0.2 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/011_pesagem_avulsa.sql
 ```
 
 Inicie a API:
 
 ```bash
-cd /opt/lampp/htdocs/balanca-platform/service
+cd /opt/lampp/htdocs/tara/service
 ./start_server.sh
 ```
 
@@ -264,9 +280,9 @@ Consulte [service/docs/MANUAL_OPERACAO.md](service/docs/MANUAL_OPERACAO.md).
 ### Estação
 
 ```bash
-cd /opt/lampp/htdocs/balanca-platform
+cd /opt/lampp/htdocs/tara
 pnpm install
-cd /opt/lampp/htdocs/balanca-platform/station
+cd /opt/lampp/htdocs/tara/station
 pnpm run dev
 ```
 
@@ -276,14 +292,14 @@ O backoffice é uma aplicação Next.js independente da estação. Para levantá
 localmente, mantenha a API da Balança em execução em um terminal:
 
 ```bash
-cd /opt/lampp/htdocs/balanca-platform/service
+cd /opt/lampp/htdocs/tara/service
 ./start_server.sh
 ```
 
 Em outro terminal, instale as dependências e inicie o painel:
 
 ```bash
-cd /opt/lampp/htdocs/balanca-platform
+cd /opt/lampp/htdocs/tara
 pnpm install
 pnpm backoffice:dev
 ```
@@ -303,7 +319,7 @@ conta, autenticar o administrador do cliente e administrar API Keys da própria
 conta.
 
 ```bash
-cd /opt/lampp/htdocs/balanca-platform
+cd /opt/lampp/htdocs/tara
 pnpm portal:dev
 ```
 
@@ -319,7 +335,7 @@ NEXT_PUBLIC_TARA_API_URL=http://localhost:8010
 O primeiro administrador deve ser criado após aplicar as migrations:
 
 ```bash
-cd /opt/lampp/htdocs/balanca-platform/service
+cd /opt/lampp/htdocs/tara/service
 export TARA_BOOTSTRAP_TENANT_ID=UUID_DO_TENANT_OPERACIONAL
 ./.venv/bin/python bootstrap_admin.py
 ```
@@ -335,7 +351,7 @@ criação ou rotação.
 Para produção ou uma execução sem o servidor de desenvolvimento:
 
 ```bash
-cd /opt/lampp/htdocs/balanca-platform
+cd /opt/lampp/htdocs/tara
 pnpm backoffice:build
 pnpm --dir backoffice start
 ```
@@ -343,7 +359,7 @@ pnpm --dir backoffice start
 ### Bridge
 
 ```bash
-cd /opt/lampp/htdocs/balanca-platform/bridge
+cd /opt/lampp/htdocs/tara/bridge
 python3 -m venv .venv
 ./.venv/bin/pip install -r requirements.txt
 cp config.yaml.example config.yaml
@@ -360,5 +376,5 @@ consumidor, sem acesso direto ao banco e sem dependência de imports internos.
 
 Este diretório possui seu próprio `.git` para permitir versionamento e release
 independentes. Em produção, ele pode ser publicado como um repositório remoto
-próprio, por exemplo `balanca-platform`.
+próprio, por exemplo `tara`.
 # balanca

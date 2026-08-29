@@ -1,25 +1,45 @@
+import uuid
+from datetime import datetime
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 
 from ..config import get_settings
 from ..db import get_session
-from ..models import ApiClient, Conta
+from ..models import ApiClient, Conta, Ordem, Pesagem, PortalUser
 from ..schemas import (
     ApiClientCredentialOut, ApiClientIn, ApiClientListOut, ApiClientStatusOut,
     LoginIn, PortalActionOut, PortalEmailTokenIn, PortalForgotPasswordIn,
     PortalLoginOut, PortalMeOut, PortalResetTokenOut,
     PortalPasswordResetIn, PortalRegisterIn, PortalRegisterOut, PortalAccountUpdateIn,
+    WebhookDestinationIn, WebhookDestinationOut, OrderOut, WeighingOut, PortalUserOut, PortalUserUpdateIn,
 )
 from ..security import require_portal_admin, require_portal
-from ..service import (
-    confirm_portal_email, create_api_client, login_portal_user,
+from ..platform_identity import (
+    confirm_portal_email, login_portal_user,
     register_portal_user, request_portal_password_reset, reset_portal_password,
-    revoke_api_client, rotate_api_client, send_api_key_rotation_instructions,
+    send_api_key_rotation_instructions,
     update_portal_account,
     verify_portal_password_reset_token,
 )
+from ..platform_identity import create_api_client, encrypt_platform_secret, revoke_api_client, rotate_api_client
+from ..models import WebhookDestination
 
 router = APIRouter(prefix="/v1/portal", tags=["Portal do Cliente"])
+
+
+@router.get("/orders", response_model=list[OrderOut])
+async def get_portal_orders(context=Depends(require_portal)):
+    tenant_id, session, _user = context
+    result = await session.execute(select(Ordem).where(Ordem.tenant_id == tenant_id).order_by(Ordem.created_at.desc()).limit(500))
+    return list(result.scalars())
+
+
+@router.get("/weighings", response_model=list[WeighingOut])
+async def get_portal_weighings(context=Depends(require_portal)):
+    tenant_id, session, _user = context
+    result = await session.execute(select(Pesagem).where(Pesagem.tenant_id == tenant_id).order_by(Pesagem.captured_at.desc()).limit(500))
+    return list(result.scalars())
 
 
 @router.post("/auth/register", response_model=PortalRegisterOut, status_code=202)
@@ -110,6 +130,52 @@ async def put_me(data: PortalAccountUpdateIn, context=Depends(require_portal_adm
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     await session.commit()
     return PortalMeOut(user_id=user.id, account_id=account.id, tenant_id=tenant_id, nome_conta=account.nome, nome_exibicao=user.nome_exibicao, email=user.email, role=user.role)
+
+
+@router.get("/webhook", response_model=WebhookDestinationOut)
+async def get_webhook_destination(context=Depends(require_portal_admin())):
+    _tenant_id, session, user = context
+    destination = (await session.execute(select(WebhookDestination).where(WebhookDestination.conta_id == user.conta_id))).scalar_one_or_none()
+    if destination is None:
+        raise HTTPException(status_code=404, detail="Webhook ainda não configurado")
+    return WebhookDestinationOut(target_url=destination.target_url, status=destination.status, event_types=destination.event_types, updated_at=destination.updated_at, max_attempts=destination.max_attempts, retry_base_seconds=destination.retry_base_seconds)
+
+
+@router.get("/users", response_model=list[PortalUserOut])
+async def get_portal_users(context=Depends(require_portal_admin())):
+    tenant_id, session, _user = context
+    result = await session.execute(select(PortalUser).where(PortalUser.tenant_id == tenant_id).order_by(PortalUser.created_at))
+    return list(result.scalars())
+
+
+@router.put("/users/{user_id}", response_model=PortalUserOut)
+async def put_portal_user(user_id: uuid.UUID, data: PortalUserUpdateIn, context=Depends(require_portal_admin())):
+    tenant_id, session, actor = context
+    target = (await session.execute(select(PortalUser).where(PortalUser.id == user_id, PortalUser.tenant_id == tenant_id))).scalar_one_or_none()
+    if target is None:
+        raise HTTPException(status_code=404, detail="Usuário do Portal não encontrado")
+    if target.id == actor.id and data.status == "INATIVO":
+        raise HTTPException(status_code=422, detail="Você não pode desativar o próprio acesso")
+    target.role, target.status = data.role, data.status
+    await session.commit()
+    return target
+
+
+@router.put("/webhook", response_model=WebhookDestinationOut)
+async def put_webhook_destination(data: WebhookDestinationIn, context=Depends(require_portal_admin())):
+    tenant_id, session, user = context
+    destination = (await session.execute(select(WebhookDestination).where(WebhookDestination.conta_id == user.conta_id))).scalar_one_or_none()
+    if destination is None:
+        if not data.hmac_secret:
+            raise HTTPException(status_code=422, detail="O segredo HMAC é obrigatório na primeira configuração")
+        destination = WebhookDestination(id=uuid.uuid4(), tenant_id=tenant_id, conta_id=user.conta_id, target_url=str(data.target_url), hmac_secret_encrypted=encrypt_platform_secret(data.hmac_secret), status="ATIVO", event_types=data.event_types, max_attempts=data.max_attempts, retry_base_seconds=data.retry_base_seconds, created_at=datetime.utcnow(), updated_at=datetime.utcnow())
+        session.add(destination)
+    else:
+        destination.target_url, destination.event_types, destination.max_attempts, destination.retry_base_seconds, destination.updated_at = str(data.target_url), data.event_types, data.max_attempts, data.retry_base_seconds, datetime.utcnow()
+        if data.hmac_secret:
+            destination.hmac_secret_encrypted = encrypt_platform_secret(data.hmac_secret)
+    await session.commit()
+    return WebhookDestinationOut(target_url=destination.target_url, status=destination.status, event_types=destination.event_types, updated_at=destination.updated_at, max_attempts=destination.max_attempts, retry_base_seconds=destination.retry_base_seconds)
 
 
 @router.get("/api-clients", response_model=list[ApiClientListOut])

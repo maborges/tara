@@ -6,6 +6,7 @@ create schema if not exists tara;
 create table if not exists tara.estacoes (
     id uuid primary key,
     tenant_id uuid not null,
+    conta_id uuid not null references tara.contas(id) on delete cascade,
     external_id varchar(120) not null,
     nome varchar(160) not null,
     activation_code varchar(12),

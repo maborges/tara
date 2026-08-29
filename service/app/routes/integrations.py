@@ -1,24 +1,29 @@
 from fastapi import APIRouter, Depends, Header, HTTPException, Query
+import base64
+import json
 from datetime import datetime
 import uuid
-from sqlalchemy import select
+from sqlalchemy import and_, or_, select
 
 from ..auth import get_session, require_station, set_tenant_context
 from ..security import require_backoffice, require_client_scope
 from ..config import get_settings
-from ..models import ApiClient, Cliente, Estacao, Operador, Ordem, Outbox
+from ..models import ApiClient, Cliente, Conta, Estacao, Operador, Ordem, Outbox, OutboxReplayAudit, Pesagem
 from ..schemas import (
-    ActivationIn, ActivationOut, ClientIn, ClientOut, EventOut, OperatorIn, OperatorOut,
-    OrderIn, OrderOut, StationIn, StationOut, WeighingIn, WeighingOut,
+    ActivationIn, ActivationOut, AccountOut, ClientIn, ClientOut, EventOut, EventReplayAuditOut, OperatorIn, OperatorOut,
+    OrderIn, OrderOut, StationIn, StationOut, WeighingIn, WeighingOut, WeighingPageOut, WeighingReconciliationIn,
     SyncPushIn, SyncPushOut, SyncResultOut, OperatorLoginIn, LoginIn, LoginOut,
-    ApiClientIn, ApiClientOut, ApiClientCredentialOut, ApiClientStatusOut, ApiClientListOut,
+    ApiClientIn, ApiClientUpdateIn, ApiClientOut, ApiClientCredentialOut, ApiClientStatusOut, ApiClientListOut,
     ContingencyPackageIn, ContingencyImportOut,
 )
 from ..contingency_service import import_contingency_package
-from ..service import (
+from ..operation import (
     activate_station, complete_weighing, create_operator, create_order, create_station,
-    register_client, login_backoffice, login_backoffice_without_tenant,
-    create_api_client, rotate_api_client, revoke_api_client,
+    register_client, reconcile_weighing,
+)
+from ..platform_identity import (
+    create_api_client, get_account, login_backoffice, login_backoffice_without_tenant,
+    rotate_api_client, revoke_api_client, update_api_client,
 )
 
 router = APIRouter(prefix="/v1", tags=["Balança"])
@@ -64,7 +69,7 @@ async def post_api_client(
     data: ApiClientIn,
     context=Depends(require_backoffice("backoffice:clientes:gerenciar")),
 ):
-    tenant_id, session, _user = context
+    tenant_id, session, user = context
     try:
         client, secret = await create_api_client(
             session, tenant_id, data.nome, data.scopes, data.expires_at
@@ -102,6 +107,28 @@ async def get_api_clients(
         )
         for client in result.scalars()
     ]
+
+
+@router.put("/admin/api-clients/{client_id}", response_model=ApiClientStatusOut)
+async def put_api_client(
+    client_id: str,
+    data: ApiClientUpdateIn,
+    context=Depends(require_backoffice("backoffice:clientes:gerenciar")),
+):
+    tenant_id, session, _user = context
+    try:
+        client = await update_api_client(
+            session, tenant_id, client_id, data.nome, data.scopes, data.expires_at
+        )
+    except ValueError as exc:
+        await session.rollback()
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    await session.commit()
+    return ApiClientStatusOut(
+        client_id=client.client_id, nome=client.nome, scopes=client.scopes,
+        status=client.status, expires_at=client.expires_at,
+        created_at=client.created_at, last_used_at=client.last_used_at,
+    )
 
 
 @router.post("/admin/api-clients/{client_id}/rotate", response_model=ApiClientCredentialOut)
@@ -185,6 +212,89 @@ async def get_orders(
     return list(result.scalars())
 
 
+@router.get("/weighings", response_model=WeighingPageOut)
+async def get_weighings(
+    status: str | None = Query(default=None),
+    cursor: str | None = Query(default=None),
+    limit: int = Query(default=100, ge=1, le=500),
+    context=Depends(require_client_scope("weighings:read")),
+):
+    tenant_id, session, _client = context
+    stmt = select(Pesagem).where(Pesagem.tenant_id == tenant_id)
+    if status:
+        stmt = stmt.where(Pesagem.reconciliation_status == status.upper())
+    if cursor:
+        try:
+            decoded = json.loads(base64.urlsafe_b64decode(cursor.encode()).decode())
+            captured_at = datetime.fromisoformat(decoded["captured_at"])
+            weighing_id = uuid.UUID(decoded["id"])
+        except (ValueError, KeyError, TypeError, json.JSONDecodeError) as exc:
+            raise HTTPException(status_code=400, detail="Cursor inválido") from exc
+        stmt = stmt.where(or_(
+            Pesagem.captured_at < captured_at,
+            and_(Pesagem.captured_at == captured_at, Pesagem.id < weighing_id),
+        ))
+    result = await session.execute(stmt.order_by(
+        Pesagem.captured_at.desc(), Pesagem.id.desc()
+    ).limit(limit + 1))
+    items = list(result.scalars())
+    next_cursor = None
+    if len(items) > limit:
+        last = items[limit - 1]
+        next_cursor = base64.urlsafe_b64encode(json.dumps({
+            "captured_at": last.captured_at.isoformat(), "id": str(last.id),
+        }, separators=(",", ":")).encode()).decode()
+        items = items[:limit]
+    return WeighingPageOut(items=items, next_cursor=next_cursor)
+
+
+@router.get("/admin/weighings", response_model=WeighingPageOut)
+async def get_admin_weighings(
+    status: str | None = Query(default=None),
+    limit: int = Query(default=500, ge=1, le=500),
+    context=Depends(require_backoffice("backoffice:pesagens:consultar")),
+):
+    """Consulta operacional para o Backoffice, sempre limitada ao tenant atual."""
+    tenant_id, session, _user = context
+    stmt = select(Pesagem).where(Pesagem.tenant_id == tenant_id)
+    if status:
+        stmt = stmt.where(Pesagem.reconciliation_status == status.upper())
+    result = await session.execute(stmt.order_by(Pesagem.captured_at.desc(), Pesagem.id.desc()).limit(limit))
+    return WeighingPageOut(items=list(result.scalars()), next_cursor=None)
+
+
+@router.post("/weighings/{weighing_id}/reconcile", response_model=WeighingOut)
+async def post_reconcile_weighing(
+    weighing_id: uuid.UUID,
+    data: WeighingReconciliationIn,
+    context=Depends(require_client_scope("weighings:reconcile")),
+):
+    tenant_id, session, _client = context
+    try:
+        weight = await reconcile_weighing(session, tenant_id, weighing_id, data)
+    except ValueError as exc:
+        await session.rollback()
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    await session.commit()
+    return weight
+
+
+@router.post("/admin/weighings/{weighing_id}/reconcile", response_model=WeighingOut)
+async def post_admin_reconcile_weighing(
+    weighing_id: uuid.UUID,
+    data: WeighingReconciliationIn,
+    context=Depends(require_backoffice("backoffice:pesagens:importar")),
+):
+    tenant_id, session, _user = context
+    try:
+        weight = await reconcile_weighing(session, tenant_id, weighing_id, data)
+    except ValueError as exc:
+        await session.rollback()
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    await session.commit()
+    return weight
+
+
 @router.post("/stations", response_model=StationOut, status_code=201)
 async def post_station(
     data: StationIn,
@@ -196,13 +306,35 @@ async def post_station(
     return station
 
 
+@router.get("/admin/accounts", response_model=list[AccountOut])
+async def get_admin_accounts(context=Depends(require_backoffice("backoffice:estacoes:gerenciar"))):
+    tenant_id, session, _user = context
+    account = await get_account(session, tenant_id)
+    await session.commit()
+    return [AccountOut(id=account.id, nome=account.nome, status=account.status)]
+
+
 @router.get("/stations", response_model=list[StationOut])
 async def get_stations(context=Depends(require_backoffice("backoffice:estacoes:gerenciar"))):
     tenant_id, session, _user = context
     result = await session.execute(
-        select(Estacao).where(Estacao.tenant_id == tenant_id).order_by(Estacao.nome)
+        select(Estacao, Conta.nome.label("conta_nome"))
+        .join(Conta, Conta.id == Estacao.conta_id)
+        .where(Estacao.tenant_id == tenant_id)
+        .order_by(Estacao.nome)
     )
-    return list(result.scalars())
+    return [
+        StationOut(
+            id=station.id,
+            conta_id=station.conta_id,
+            conta_nome=conta_nome,
+            external_id=station.external_id,
+            nome=station.nome,
+            activation_code=station.activation_code,
+            status=station.status,
+        )
+        for station, conta_nome in result.all()
+    ]
 
 
 @router.post("/stations/activate", response_model=ActivationOut)
@@ -331,6 +463,10 @@ async def post_sync(data: SyncPushIn, context=Depends(require_station)):
                     captured_via=payload.get("captured_via", "MANUAL"),
                     leitura_bruta=payload.get("leitura_bruta"),
                     captured_at=payload.get("data_pesagem"),
+                    direcao_veiculo=payload.get("direcao_veiculo"),
+                    natureza_mercadoria=payload.get("natureza_mercadoria"),
+                    tipo_operacao=payload.get("tipo_operacao"),
+                    contexto=payload.get("contexto", {}),
                 ),
             )
             results.append(SyncResultOut(local_id=item.local_id, status="CREATED", server_id=weight.id))
@@ -399,4 +535,45 @@ async def get_admin_events(
     if status:
         stmt = stmt.where(Outbox.status == status.upper())
     result = await session.execute(stmt.order_by(Outbox.created_at.desc()).limit(500))
+    return list(result.scalars())
+
+
+@router.post("/admin/events/{event_id}/replay", response_model=EventOut)
+async def replay_admin_event(
+    event_id: uuid.UUID,
+    context=Depends(require_backoffice("backoffice:eventos:consultar")),
+):
+    """Reenfileira um evento sem duplicar o registro nem alterar seu payload."""
+    tenant_id, session, _user = context
+    event = (await session.execute(select(Outbox).where(
+        Outbox.id == event_id, Outbox.tenant_id == tenant_id,
+    ))).scalar_one_or_none()
+    if event is None:
+        raise HTTPException(status_code=404, detail="Evento não encontrado")
+    previous_status = event.status
+    event.status = "PENDENTE"
+    event.next_attempt_at = None
+    event.last_error = "Reenfileirado manualmente pelo Backoffice"
+    event.updated_at = datetime.utcnow()
+    session.add(OutboxReplayAudit(
+        id=uuid.uuid4(), tenant_id=tenant_id, outbox_id=event.id,
+        actor_user_id=user.id, previous_status=previous_status,
+        reason="Reenfileirado manualmente pelo Backoffice", created_at=datetime.utcnow(),
+    ))
+    await session.commit()
+    return event
+
+
+@router.get("/admin/events/{event_id}/replays", response_model=list[EventReplayAuditOut])
+async def get_admin_event_replays(
+    event_id: uuid.UUID,
+    context=Depends(require_backoffice("backoffice:eventos:consultar")),
+):
+    tenant_id, session, _user = context
+    event = (await session.execute(select(Outbox).where(Outbox.id == event_id, Outbox.tenant_id == tenant_id))).scalar_one_or_none()
+    if event is None:
+        raise HTTPException(status_code=404, detail="Evento não encontrado")
+    result = await session.execute(select(OutboxReplayAudit).where(
+        OutboxReplayAudit.outbox_id == event_id, OutboxReplayAudit.tenant_id == tenant_id,
+    ).order_by(OutboxReplayAudit.created_at.desc()))
     return list(result.scalars())

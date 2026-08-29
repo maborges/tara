@@ -11,7 +11,7 @@ regex em `config.yaml` (ver `config.yaml.example`), cobrindo o formato ASCII
 ## Instalação
 
 ```bash
-cd /opt/lampp/htdocs/balanca-platform/bridge
+cd /opt/lampp/htdocs/tara/bridge
 python3 -m venv .venv
 ./.venv/bin/pip install -r requirements.txt
 cp config.yaml.example config.yaml

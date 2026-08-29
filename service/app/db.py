@@ -21,6 +21,13 @@ async def set_tenant_context(session: AsyncSession, tenant_id: str) -> None:
     )
 
 
+async def set_platform_admin_context(session: AsyncSession, admin_user_id: str) -> None:
+    """Marca a identidade global autenticada para as políticas RLS da plataforma."""
+    await session.execute(
+        text("select set_config('app.platform_admin_id', :admin_user_id, false)"),
+        {"admin_user_id": admin_user_id},
+    )
+
+
 async def dispose_engine() -> None:
     await _engine.dispose()
-

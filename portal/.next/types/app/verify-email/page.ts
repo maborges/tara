@@ -1,4 +1,4 @@
-// File: /opt/lampp/htdocs/balanca-platform/portal/src/app/verify-email/page.tsx
+// File: /opt/lampp/htdocs/tara/portal/src/app/verify-email/page.tsx
 import * as entry from '../../../../src/app/verify-email/page.js'
 import type { ResolvingMetadata, ResolvingViewport } from 'next/dist/lib/metadata/types/metadata-interface.js'
 

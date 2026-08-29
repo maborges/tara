@@ -1,3 +1,4 @@
+import json
 from functools import lru_cache
 
 from pydantic import model_validator
@@ -24,6 +25,7 @@ class Settings(BaseSettings):
     outbox_tenant_id: str | None = None
     outbox_target_url: str | None = None
     outbox_target_api_key: str | None = None
+    outbox_account_destinations_json: str | None = None
     outbox_file_path: str | None = None
     outbox_batch_size: int = 50
     outbox_interval_seconds: int = 10
@@ -39,6 +41,22 @@ class Settings(BaseSettings):
             if self.allow_legacy_api_key:
                 raise ValueError("TARA_ALLOW_LEGACY_API_KEY deve ser false em produção")
         return self
+
+    def outbox_destination(self, account_id: str) -> tuple[str, str] | None:
+        """Return the URL and HMAC secret configured for one account."""
+        if self.outbox_account_destinations_json:
+            try:
+                destinations = json.loads(self.outbox_account_destinations_json)
+            except json.JSONDecodeError as exc:
+                raise ValueError("TARA_OUTBOX_ACCOUNT_DESTINATIONS_JSON inválido") from exc
+            destination = destinations.get(account_id)
+            if destination:
+                if not destination.get("url") or not destination.get("hmac_secret"):
+                    raise ValueError(f"Destino de outbox incompleto para a conta {account_id}")
+                return destination["url"], destination["hmac_secret"]
+        if self.outbox_target_url and self.outbox_target_api_key:
+            return self.outbox_target_url, self.outbox_target_api_key
+        return None
 
 
 @lru_cache
