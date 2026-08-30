@@ -17,7 +17,14 @@ async def require_station(
     authorization: str = Header(..., alias="Authorization"),
     x_tenant_id: str = Header(..., alias="X-Tenant-ID"),
     session: AsyncSession = Depends(get_session),
-) -> tuple[uuid.UUID, AsyncSession]:
+) -> tuple[uuid.UUID, AsyncSession, object]:
+    """Authenticate a physical station and preserve its identity for capture.
+
+    Returns:
+        The tenant, active database session and authenticated station.
+    Raises:
+        HTTPException: If the authorization or station identity is invalid.
+    """
     if not authorization.startswith("Bearer "):
         raise HTTPException(status_code=401, detail="Bearer da estação ausente")
     try:
@@ -33,7 +40,7 @@ async def require_station(
     if station is None:
         raise HTTPException(status_code=401, detail="Token da estação inválido")
     station.last_seen_at = datetime.utcnow()
-    return tenant_id, session
+    return tenant_id, session, station
 
 
 def new_token() -> str:

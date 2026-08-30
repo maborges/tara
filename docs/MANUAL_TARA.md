@@ -73,6 +73,13 @@ psql --set=ON_ERROR_STOP=1 "$TARA_DATABASE_URL" -f migrations/007_platform_email
 psql --set=ON_ERROR_STOP=1 "$TARA_DATABASE_URL" -f migrations/008_api_client_secret_rotation.sql
 psql --set=ON_ERROR_STOP=1 "$TARA_DATABASE_URL" -f migrations/009_rename_balanca_schema.sql
 psql --set=ON_ERROR_STOP=1 "$TARA_DATABASE_URL" -f migrations/010_station_account.sql
+psql --set=ON_ERROR_STOP=1 "$TARA_DATABASE_URL" -f migrations/011_pesagem_avulsa.sql
+psql --set=ON_ERROR_STOP=1 "$TARA_DATABASE_URL" -f migrations/012_platform_admin_rls.sql
+psql --set=ON_ERROR_STOP=1 "$TARA_DATABASE_URL" -f migrations/013_webhook_destinations.sql
+psql --set=ON_ERROR_STOP=1 "$TARA_DATABASE_URL" -f migrations/014_outbox_replay_audit.sql
+psql --set=ON_ERROR_STOP=1 "$TARA_DATABASE_URL" -f migrations/015_webhook_retry_policy.sql
+psql --set=ON_ERROR_STOP=1 "$TARA_DATABASE_URL" -f migrations/016_platform_dashboard_rls.sql
+psql --set=ON_ERROR_STOP=1 "$TARA_DATABASE_URL" -f migrations/017_pesagem_station.sql
 ./start_server.sh
 ```
 

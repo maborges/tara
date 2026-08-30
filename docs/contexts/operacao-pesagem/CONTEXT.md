@@ -5,7 +5,7 @@ Este contexto representa a movimentação medida pela balança e preserva a auto
 ## Pesagem e operação
 
 **Pesagem**:
-Registro imutável de uma medição realizada por uma estação, com seu contexto operacional e evidências disponíveis.
+Registro imutável de uma medição realizada por uma estação, com sua `estacao_id`, contexto operacional e evidências disponíveis.
 _Evitar_: transação
 
 **Pesagem vinculada**:

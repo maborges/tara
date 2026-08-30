@@ -121,7 +121,8 @@ async def complete_weighing(session: AsyncSession, tenant_id: uuid.UUID, data) -
     if duplicate:
         return duplicate
     weight = Pesagem(
-        id=uuid.uuid4(), tenant_id=tenant_id, ordem_id=order.id if order else None,
+        id=uuid.uuid4(), tenant_id=tenant_id, estacao_id=data.estacao_id,
+        ordem_id=order.id if order else None,
         local_id=data.local_id, etapa=data.etapa,
         peso_aferido_kg=data.peso_aferido_kg,
         peso_informado_kg=data.peso_informado_kg, peso_tara_kg=data.peso_tara_kg,

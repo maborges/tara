@@ -11,7 +11,7 @@ Componente local que conecta o indicador físico à estação e normaliza suas l
 _Evitar_: colocar regra de negócio do consumidor na bridge
 
 **Captura offline**:
-Registro feito sem conexão disponível, com identificador local único e evidências de estação, operador, horário, leitura e estabilidade.
+Registro feito sem conexão disponível, com identificador local único e evidências de estação (preservada como `estacao_id`), operador, horário, leitura e estabilidade.
 _Evitar_: registro descartável
 
 **Sincronização**:

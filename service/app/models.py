@@ -355,6 +355,7 @@ class Pesagem(Base):
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
     tenant_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    estacao_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("tara.estacoes.id"), nullable=True)
     ordem_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("tara.ordens.id"), nullable=True)
     local_id: Mapped[str] = mapped_column(String(120), nullable=False)
     etapa: Mapped[str] = mapped_column(String(30), nullable=False)

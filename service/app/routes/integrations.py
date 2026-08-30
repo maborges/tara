@@ -394,7 +394,7 @@ async def post_revoke_operator(
 
 @router.get("/stations/operators", response_model=list[OperatorOut])
 async def get_station_operators(context=Depends(require_station)):
-    tenant_id, session = context
+    tenant_id, session, _station = context
     result = await session.execute(
         select(Operador).where(Operador.tenant_id == tenant_id, Operador.status == "ATIVO")
     )
@@ -409,7 +409,7 @@ async def post_station_operator_login(
     import hashlib
     import hmac
 
-    tenant_id, session = context
+    tenant_id, session, _station = context
     operator = (await session.execute(
         select(Operador).where(
             Operador.id == data.operador_id,
@@ -433,9 +433,10 @@ async def post_station_operator_login(
 
 @router.post("/stations/pesagens", response_model=WeighingOut, status_code=201)
 async def post_weighing(data: WeighingIn, context=Depends(require_station)):
-    tenant_id, session = context
+    tenant_id, session, station = context
     try:
-        weight = await complete_weighing(session, tenant_id, data)
+        capture = data.model_copy(update={"estacao_id": station.id})
+        weight = await complete_weighing(session, tenant_id, capture)
     except ValueError as exc:
         await session.rollback()
         raise HTTPException(status_code=422, detail=str(exc)) from exc
@@ -445,7 +446,7 @@ async def post_weighing(data: WeighingIn, context=Depends(require_station)):
 
 @router.post("/stations/sync/push", response_model=SyncPushOut)
 async def post_sync(data: SyncPushIn, context=Depends(require_station)):
-    tenant_id, session = context
+    tenant_id, session, station = context
     results = []
     for item in data.items:
         payload = item.payload
@@ -454,6 +455,7 @@ async def post_sync(data: SyncPushIn, context=Depends(require_station)):
                 session,
                 tenant_id,
                 WeighingIn(
+                    estacao_id=station.id,
                     ordem_id=payload["ordem_id"],
                     local_id=item.local_id,
                     etapa=payload.get("etapa", "UNICA"),
@@ -478,7 +480,7 @@ async def post_sync(data: SyncPushIn, context=Depends(require_station)):
 
 @router.get("/stations/sync/pull")
 async def get_sync(context=Depends(require_station)):
-    tenant_id, session = context
+    tenant_id, session, _station = context
     result = await session.execute(
         select(Ordem).where(Ordem.tenant_id == tenant_id, Ordem.status == "PENDENTE")
         .order_by(Ordem.created_at)

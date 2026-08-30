@@ -49,6 +49,7 @@ def _idempotency_key(weight: Any, order: Any, data: Any) -> str:
 def _payload(weight: Any, order: Any, data: Any, liquid_weight: Decimal) -> dict[str, Any]:
     return {
         "ordem_id": str(order.id) if order else None, "pesagem_id": str(weight.id),
+        "estacao_id": str(weight.estacao_id) if getattr(weight, "estacao_id", None) else None,
         "capture_id": data.local_id, "etapa": weight.etapa,
         "peso_aferido_kg": str(weight.peso_aferido_kg),
         "peso_tara_kg": str(weight.peso_tara_kg or Decimal("0")),

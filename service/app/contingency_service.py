@@ -36,7 +36,7 @@ async def import_contingency_package(session: AsyncSession, tenant_id: uuid.UUID
     lot = _create_lot(tenant_id, package, fingerprint, raw)
     session.add(lot)
     await session.flush()
-    results = await _import_items(session, tenant_id, lot.id, package.records)
+    results = await _import_items(session, tenant_id, lot.id, package.station_id, package.records)
     lot.status = _lot_status(results)
     lot.imported_at = datetime.utcnow()
     await session.flush()
@@ -76,20 +76,20 @@ def _create_lot(tenant_id, package, fingerprint, raw) -> ContingenciaLote:
     return ContingenciaLote(id=uuid.uuid4(), tenant_id=tenant_id, station_id=package.station_id, package_id=package.package_id, sequence_number=package.sequence_number, schema_version=package.schema_version, package_hash=package_hash(raw), identity_fingerprint=fingerprint, record_count=len(package.records), status="RECEBIDO", raw_package=raw, created_at=datetime.utcnow())
 
 
-async def _import_items(session, tenant_id, lot_id, records):
+async def _import_items(session, tenant_id, lot_id, station_id, records):
     results = []
     for record in records:
-        results.append(await _import_item(session, tenant_id, lot_id, record))
+        results.append(await _import_item(session, tenant_id, lot_id, station_id, record))
     return results
 
 
-async def _import_item(session, tenant_id, lot_id, record):
+async def _import_item(session, tenant_id, lot_id, station_id, record):
     duplicate = (await session.execute(select(Pesagem).where(Pesagem.tenant_id == tenant_id, Pesagem.local_id == record.local_id))).scalar_one_or_none()
     if duplicate:
         return _save_item(session, tenant_id, lot_id, record, "DUPLICADO", duplicate.id)
     try:
         order_id = record.ordem_id or await _create_shadow_order(session, tenant_id, record)
-        weight = await complete_weighing(session, tenant_id, WeighingIn(ordem_id=order_id, local_id=record.local_id, etapa=record.etapa, peso_aferido_kg=Decimal(record.peso_aferido_kg), peso_informado_kg=_decimal(record.peso_informado_kg), peso_tara_kg=_decimal(record.peso_tara_kg), captured_via=record.captured_via, leitura_bruta=record.leitura_bruta, captured_at=_naive_datetime(record.data_pesagem)))
+        weight = await complete_weighing(session, tenant_id, WeighingIn(estacao_id=station_id, ordem_id=order_id, local_id=record.local_id, etapa=record.etapa, peso_aferido_kg=Decimal(record.peso_aferido_kg), peso_informado_kg=_decimal(record.peso_informado_kg), peso_tara_kg=_decimal(record.peso_tara_kg), captured_via=record.captured_via, leitura_bruta=record.leitura_bruta, captured_at=_naive_datetime(record.data_pesagem)))
         return _save_item(session, tenant_id, lot_id, record, "IMPORTADO", weight.id)
     except (ValueError, KeyError) as exc:
         return _save_item(session, tenant_id, lot_id, record, "REJEITADO", None, str(exc))

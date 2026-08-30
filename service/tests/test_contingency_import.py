@@ -80,6 +80,10 @@ async def test_import_contingency_is_signed_idempotent_and_tenant_scoped():
         response = await client.post("/v1/contingency/import", headers=admin, json=package)
         assert response.status_code == 200, response.text
         assert response.json()["status"] == "IMPORTADO"
+        # A captura importada mantém a origem física do pacote.
+        response = await client.get("/v1/admin/weighings?limit=1", headers=admin)
+        assert response.status_code == 200, response.text
+        assert response.json()["items"][0]["estacao_id"] == str(station.id)
         response = await client.post("/v1/contingency/import", headers=admin, json=package)
         assert response.status_code == 200, response.text
         assert response.json()["message"] == "Pacote já processado"

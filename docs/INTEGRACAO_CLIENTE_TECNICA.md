@@ -135,6 +135,7 @@ X-Balanca-Client-Secret: <client_secret>
 Regras:
 
 - `local_id` é obrigatório e idempotente por Conta.
+- `estacao_id` é atribuído pelo serviço a partir do token da estação; a aplicação cliente não deve enviá-lo nem tentar substituí-lo.
 - `peso_aferido_kg` deve ser decimal estritamente positivo.
 - `data_pesagem` preserva o momento físico; não o substitua durante retry.
 - `direcao_veiculo` é `ENTRADA` ou `SAIDA`.
@@ -148,7 +149,7 @@ Regras:
   "items": [
     {
       "local_id": "station-01:20260828:000042",
-      "payload": { "local_id": "station-01:20260828:000042", "ordem_id": null, "etapa": "UNICA", "peso_aferido_kg": "38450.000", "peso_tara_kg": "12000.000", "captured_via": "ELETRONICA", "data_pesagem": "2026-08-28T14:03:12Z", "direcao_veiculo": "ENTRADA", "natureza_mercadoria": "ENTRADA", "tipo_operacao": "COMPRA", "contexto": {} }
+      "payload": { "local_id": "station-01:20260828:000042", "ordem_id": null, "estacao_id": "uuid-da-estacao", "etapa": "UNICA", "peso_aferido_kg": "38450.000", "peso_tara_kg": "12000.000", "captured_via": "ELETRONICA", "data_pesagem": "2026-08-28T14:03:12Z", "direcao_veiculo": "ENTRADA", "natureza_mercadoria": "ENTRADA", "tipo_operacao": "COMPRA", "contexto": {} }
     }
   ]
 }

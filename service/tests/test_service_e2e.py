@@ -34,7 +34,7 @@ async def test_standalone_service_order_station_weighing_observer_flow():
             session,
             uuid.UUID(tenant_id),
             "AgroSaaS E2E",
-            ["clients:write", "orders:write", "events:read", "stations:activate"],
+            ["clients:write", "orders:write", "events:read", "weighings:read", "stations:activate"],
             None,
         )
         await session.commit()
@@ -100,6 +100,7 @@ async def test_standalone_service_order_station_weighing_observer_flow():
             json={"activation_code": activation_code},
         )
         assert response.status_code == 200, response.text
+        station_id = response.json()["station_id"]
         station_headers = {
             "X-Tenant-ID": tenant_id,
             "Authorization": f"Bearer {response.json()['station_token']}",
@@ -140,6 +141,10 @@ async def test_standalone_service_order_station_weighing_observer_flow():
         )
         assert response.status_code == 200, response.text
         assert response.json()["results"][0]["status"] == "CREATED"
+
+        response = await client.get("/v1/weighings?limit=1", headers=integration_headers)
+        assert response.status_code == 200, response.text
+        assert response.json()["items"][0]["estacao_id"] == station_id
 
         response = await client.get("/v1/events?status=PENDENTE", headers=integration_headers)
         assert response.status_code == 200, response.text

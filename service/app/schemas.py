@@ -344,6 +344,7 @@ class OperatorOut(BaseModel):
 
 
 class WeighingIn(BaseModel):
+    estacao_id: uuid.UUID | None = None
     ordem_id: uuid.UUID | None = None
     local_id: str = Field(min_length=1, max_length=120)
     etapa: str = Field(min_length=1, max_length=30)
@@ -363,6 +364,7 @@ class WeighingIn(BaseModel):
 class WeighingOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: uuid.UUID
+    estacao_id: uuid.UUID | None
     ordem_id: uuid.UUID | None
     local_id: str
     etapa: str
