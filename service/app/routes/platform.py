@@ -5,7 +5,7 @@ import uuid
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import func, select
 
-from ..schemas import PlatformAccountOut, PlatformAccountUpdateIn, PlatformDashboardOut, PlatformEmailSettingsIn, PlatformEmailSettingsOut, PlatformEmailTestIn
+from ..schemas import AccountDashboardOut, PlatformAccountOut, PlatformAccountUpdateIn, PlatformDashboardOut, PlatformEmailSettingsIn, PlatformEmailSettingsOut, PlatformEmailTestIn
 from ..security import require_platform_admin
 from ..platform_identity import encrypt_platform_secret, load_email_settings, send_portal_email
 from ..models import ApiClient, Cliente, Conta, Estacao, Operador, Ordem, Outbox, Pesagem, PlatformSetting, PortalUser
@@ -69,6 +69,43 @@ async def get_platform_accounts(context=Depends(require_platform_admin)):
         )
         for account, email, nome in result.all()
     ]
+
+
+@router.get("/accounts/{account_id}/dashboard", response_model=AccountDashboardOut)
+async def get_account_dashboard(account_id: uuid.UUID, context=Depends(require_platform_admin)):
+    session, _admin = context
+    account = await session.get(Conta, account_id)
+    if account is None:
+        raise HTTPException(status_code=404, detail="Conta não encontrada")
+
+    async def total(model, *filters):
+        return int((await session.execute(select(func.count()).select_from(model).where(model.tenant_id == account.tenant_id, *filters))).scalar_one())
+
+    owner = (await session.execute(
+        select(PortalUser.email, PortalUser.nome_exibicao)
+        .where(PortalUser.conta_id == account.id)
+        .order_by(PortalUser.created_at)
+        .limit(1)
+    )).first()
+    systems = (await session.execute(
+        select(ApiClient).where(ApiClient.tenant_id == account.tenant_id)
+        .order_by(ApiClient.last_used_at.desc().nullslast(), ApiClient.created_at.desc())
+    )).scalars().all()
+    return AccountDashboardOut(
+        account_id=account.id, account_name=account.nome, account_status=account.status,
+        owner_email=owner[0] if owner else None, owner_name=owner[1] if owner else None,
+        accounts_total=1, accounts_by_status={account.status: 1},
+        clients_total=await total(Cliente), api_keys_active=await total(ApiClient, ApiClient.status == "ATIVO"),
+        orders_total=await total(Ordem), orders_open=await total(Ordem, Ordem.status != "CONCLUIDA"),
+        orders_completed=await total(Ordem, Ordem.status == "CONCLUIDA"), weighings_total=await total(Pesagem),
+        weighings_pending=await total(Pesagem, Pesagem.reconciliation_status.not_in(["VINCULADA", "NAO_APLICAVEL"])),
+        stations_total=await total(Estacao), stations_active=await total(Estacao, Estacao.status == "ATIVA"),
+        operators_active=await total(Operador, Operador.status == "ATIVO"), events_total=await total(Outbox),
+        events_pending=await total(Outbox, Outbox.status != "ENTREGUE"),
+        client_systems=[{"client_id": item.client_id, "nome": item.nome, "account_name": account.nome,
+                         "status": item.status, "scopes": item.scopes, "last_used_at": item.last_used_at,
+                         "created_at": item.created_at} for item in systems],
+    )
 
 
 @router.put("/accounts/{account_id}", response_model=PlatformAccountOut)

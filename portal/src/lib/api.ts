@@ -30,6 +30,7 @@ export interface WebhookDestination { target_url: string; status: string; event_
 export interface PortalOrder { id: string; sistema_cliente: string; referencia_externa: string; subject_type: string; tipo_pesagem: string; status: string; peso_liquido_kg: string | number | null; created_at: string; concluida_em: string | null; }
 export interface PortalWeighing { id: string; ordem_id: string | null; local_id: string; etapa: string; peso_aferido_kg: string | number; captured_at: string; reconciliation_status: string; }
 export interface PortalUser { id: string; email: string; nome_exibicao: string; role: string; status: string; created_at: string; }
+export interface AccountDashboard { account_id: string; account_name: string; account_status: string; owner_email: string | null; owner_name: string | null; accounts_total: number; accounts_by_status: Record<string, number>; clients_total: number; api_keys_active: number; orders_total: number; orders_open: number; orders_completed: number; weighings_total: number; weighings_pending: number; stations_total: number; stations_active: number; operators_active: number; events_total: number; events_pending: number; client_systems: { client_id: string; nome: string; status: string; last_used_at: string | null }[]; }
 
 interface AuthResponse {
   access_token: string;
@@ -133,6 +134,7 @@ export async function revokeApiClient(session: Session, clientId: string) {
 }
 
 export async function getPortalMe(session: Session) { return apiFetch<PortalMe>("/v1/portal/me", session); }
+export async function getPortalDashboard(session: Session) { return apiFetch<AccountDashboard>("/v1/portal/dashboard", session); }
 export async function updatePortalMe(session: Session, payload: { nome_conta: string; nome_exibicao: string }) { return apiFetch<PortalMe>("/v1/portal/me", session, { method: "PUT", body: JSON.stringify(payload) }); }
 export async function sendApiKeyRecoveryEmail(session: Session, clientId: string) { return apiFetch<{ message: string }>(`/v1/portal/api-clients/${encodeURIComponent(clientId)}/send-recovery-email`, session, { method: "POST" }); }
 export async function getWebhookDestination(session: Session) { return apiFetch<WebhookDestination>("/v1/portal/webhook", session); }

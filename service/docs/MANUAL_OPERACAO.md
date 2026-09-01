@@ -49,18 +49,18 @@ para o comando `psql`, informe host, usuário e banco separadamente:
 
 ```bash
 cd /opt/lampp/htdocs/tara/service
-psql -h 192.168.0.2 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/000_platform_foundation.sql
-psql -h 192.168.0.2 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/001_service_tables.sql
-psql -h 192.168.0.2 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/002_security_identity.sql
-psql -h 192.168.0.2 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/003_contingency.sql
-psql -h 192.168.0.2 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/004_platform_admin.sql
-psql -h 192.168.0.2 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/005_customer_portal.sql
-psql -h 192.168.0.2 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/006_portal_email_security.sql
-psql -h 192.168.0.2 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/007_platform_email_settings.sql
-psql -h 192.168.0.2 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/008_api_client_secret_rotation.sql
-psql -h 192.168.0.2 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/009_rename_balanca_schema.sql
-psql -h 192.168.0.2 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/010_station_account.sql
-psql -h 192.168.0.2 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/011_pesagem_avulsa.sql
+psql -h 192.168.0.3 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/000_platform_foundation.sql
+psql -h 192.168.0.3 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/001_service_tables.sql
+psql -h 192.168.0.3 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/002_security_identity.sql
+psql -h 192.168.0.3 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/003_contingency.sql
+psql -h 192.168.0.3 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/004_platform_admin.sql
+psql -h 192.168.0.3 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/005_customer_portal.sql
+psql -h 192.168.0.3 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/006_portal_email_security.sql
+psql -h 192.168.0.3 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/007_platform_email_settings.sql
+psql -h 192.168.0.3 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/008_api_client_secret_rotation.sql
+psql -h 192.168.0.3 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/009_rename_balanca_schema.sql
+psql -h 192.168.0.3 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/010_station_account.sql
+psql -h 192.168.0.3 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/011_pesagem_avulsa.sql
 ```
 
 Então, inicie a API:

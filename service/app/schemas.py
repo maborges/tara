@@ -54,6 +54,14 @@ class PlatformDashboardOut(BaseModel):
     client_systems: list[dict[str, Any]] = Field(default_factory=list)
 
 
+class AccountDashboardOut(PlatformDashboardOut):
+    account_id: uuid.UUID
+    account_name: str
+    account_status: str
+    owner_email: str | None = None
+    owner_name: str | None = None
+
+
 class WebhookDestinationIn(BaseModel):
     target_url: str = Field(min_length=8, max_length=500)
     hmac_secret: str | None = Field(default=None, min_length=32, max_length=255)

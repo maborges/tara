@@ -33,24 +33,24 @@ O banco correto é `farms`; `tara` é o schema:
 
 ```bash
 cd /opt/lampp/htdocs/tara/service
-psql -h 192.168.0.2 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/000_platform_foundation.sql
-psql -h 192.168.0.2 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/001_service_tables.sql
-psql -h 192.168.0.2 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/002_security_identity.sql
-psql -h 192.168.0.2 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/003_contingency.sql
-psql -h 192.168.0.2 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/004_platform_admin.sql
-psql -h 192.168.0.2 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/005_customer_portal.sql
-psql -h 192.168.0.2 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/006_portal_email_security.sql
-psql -h 192.168.0.2 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/007_platform_email_settings.sql
-psql -h 192.168.0.2 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/008_api_client_secret_rotation.sql
-psql -h 192.168.0.2 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/009_rename_balanca_schema.sql
-psql -h 192.168.0.2 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/010_station_account.sql
-psql -h 192.168.0.2 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/011_pesagem_avulsa.sql
-psql -h 192.168.0.2 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/012_platform_admin_rls.sql
-psql -h 192.168.0.2 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/013_webhook_destinations.sql
-psql -h 192.168.0.2 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/014_outbox_replay_audit.sql
-psql -h 192.168.0.2 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/015_webhook_retry_policy.sql
-psql -h 192.168.0.2 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/016_platform_dashboard_rls.sql
-psql -h 192.168.0.2 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/017_pesagem_station.sql
+psql -h 192.168.0.3 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/000_platform_foundation.sql
+psql -h 192.168.0.3 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/001_service_tables.sql
+psql -h 192.168.0.3 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/002_security_identity.sql
+psql -h 192.168.0.3 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/003_contingency.sql
+psql -h 192.168.0.3 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/004_platform_admin.sql
+psql -h 192.168.0.3 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/005_customer_portal.sql
+psql -h 192.168.0.3 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/006_portal_email_security.sql
+psql -h 192.168.0.3 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/007_platform_email_settings.sql
+psql -h 192.168.0.3 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/008_api_client_secret_rotation.sql
+psql -h 192.168.0.3 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/009_rename_balanca_schema.sql
+psql -h 192.168.0.3 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/010_station_account.sql
+psql -h 192.168.0.3 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/011_pesagem_avulsa.sql
+psql -h 192.168.0.3 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/012_platform_admin_rls.sql
+psql -h 192.168.0.3 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/013_webhook_destinations.sql
+psql -h 192.168.0.3 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/014_outbox_replay_audit.sql
+psql -h 192.168.0.3 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/015_webhook_retry_policy.sql
+psql -h 192.168.0.3 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/016_platform_dashboard_rls.sql
+psql -h 192.168.0.3 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/017_pesagem_station.sql
 ```
 
 Configure `service/.env`, principalmente `TARA_DATABASE_URL`,
@@ -253,24 +253,24 @@ Aplique as migrations:
 
 ```bash
 cd /opt/lampp/htdocs/tara/service
-psql -h 192.168.0.2 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/000_platform_foundation.sql
-psql -h 192.168.0.2 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/001_service_tables.sql
-psql -h 192.168.0.2 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/002_security_identity.sql
-psql -h 192.168.0.2 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/003_contingency.sql
-psql -h 192.168.0.2 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/004_platform_admin.sql
-psql -h 192.168.0.2 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/005_customer_portal.sql
-psql -h 192.168.0.2 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/006_portal_email_security.sql
-psql -h 192.168.0.2 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/007_platform_email_settings.sql
-psql -h 192.168.0.2 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/008_api_client_secret_rotation.sql
-psql -h 192.168.0.2 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/009_rename_balanca_schema.sql
-psql -h 192.168.0.2 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/010_station_account.sql
-psql -h 192.168.0.2 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/011_pesagem_avulsa.sql
-psql -h 192.168.0.2 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/012_platform_admin_rls.sql
-psql -h 192.168.0.2 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/013_webhook_destinations.sql
-psql -h 192.168.0.2 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/014_outbox_replay_audit.sql
-psql -h 192.168.0.2 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/015_webhook_retry_policy.sql
-psql -h 192.168.0.2 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/016_platform_dashboard_rls.sql
-psql -h 192.168.0.2 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/017_pesagem_station.sql
+psql -h 192.168.0.3 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/000_platform_foundation.sql
+psql -h 192.168.0.3 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/001_service_tables.sql
+psql -h 192.168.0.3 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/002_security_identity.sql
+psql -h 192.168.0.3 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/003_contingency.sql
+psql -h 192.168.0.3 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/004_platform_admin.sql
+psql -h 192.168.0.3 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/005_customer_portal.sql
+psql -h 192.168.0.3 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/006_portal_email_security.sql
+psql -h 192.168.0.3 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/007_platform_email_settings.sql
+psql -h 192.168.0.3 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/008_api_client_secret_rotation.sql
+psql -h 192.168.0.3 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/009_rename_balanca_schema.sql
+psql -h 192.168.0.3 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/010_station_account.sql
+psql -h 192.168.0.3 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/011_pesagem_avulsa.sql
+psql -h 192.168.0.3 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/012_platform_admin_rls.sql
+psql -h 192.168.0.3 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/013_webhook_destinations.sql
+psql -h 192.168.0.3 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/014_outbox_replay_audit.sql
+psql -h 192.168.0.3 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/015_webhook_retry_policy.sql
+psql -h 192.168.0.3 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/016_platform_dashboard_rls.sql
+psql -h 192.168.0.3 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/017_pesagem_station.sql
 ```
 
 Inicie a API:

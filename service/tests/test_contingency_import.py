@@ -11,7 +11,7 @@ import pytest
 from jose import jwk
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
-os.environ.setdefault("TARA_DATABASE_URL", "postgresql+asyncpg://borgus:numsey01@192.168.0.2/farms")
+os.environ.setdefault("TARA_DATABASE_URL", "postgresql+asyncpg://borgus:numsey01@192.168.0.3/farms")
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from app.contingency import canonical_payload

@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Activity, Ban, Check, Copy, KeyRound, LogOut, Mail, Plus, RefreshCw, RotateCcw, ShieldCheck, Sun, Moon } from "lucide-react";
-import { authenticate, createApiClient, formatDate, getWebhookDestination, listApiClients, listPortalOrders, listPortalUsers, listPortalWeighings, registerAccount, revokeApiClient, rotateApiClient, saveWebhookDestination, sendApiKeyRecoveryEmail, updatePortalUser, type ApiClient, type NewCredential, type PortalOrder, type PortalUser, type PortalWeighing, type Session, type WebhookDestination } from "@/lib/api";
+import { Activity, Ban, Check, ClipboardList, Copy, Gauge, KeyRound, LogOut, Mail, Plus, RefreshCw, RotateCcw, RotateCw, ShieldCheck, Sun, Moon, Users, Wifi } from "lucide-react";
+import { authenticate, createApiClient, formatDate, getPortalDashboard, getWebhookDestination, listApiClients, listPortalOrders, listPortalUsers, listPortalWeighings, registerAccount, revokeApiClient, rotateApiClient, saveWebhookDestination, sendApiKeyRecoveryEmail, updatePortalUser, type AccountDashboard, type ApiClient, type NewCredential, type PortalOrder, type PortalUser, type PortalWeighing, type Session, type WebhookDestination } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -65,11 +65,12 @@ function WebhookPanel({ session }: { session: Session }) {
 }
 
 function PortalActivity({ session }: { session: Session }) {
-  const [orders, setOrders] = useState<PortalOrder[]>([]); const [weighings, setWeighings] = useState<PortalWeighing[]>([]); const [loading, setLoading] = useState(true); const [error, setError] = useState<string | null>(null);
+  const [orders, setOrders] = useState<PortalOrder[]>([]); const [weighings, setWeighings] = useState<PortalWeighing[]>([]); const [loading, setLoading] = useState(true); const [error, setError] = useState<string | null>(null); const [query, setQuery] = useState(""); const [status, setStatus] = useState("TODOS");
   async function load() { setLoading(true); try { const [nextOrders, nextWeighings] = await Promise.all([listPortalOrders(session), listPortalWeighings(session)]); setOrders(nextOrders); setWeighings(nextWeighings); } catch (cause) { setError(cause instanceof Error ? cause.message : "Falha ao carregar atividade."); } finally { setLoading(false); } }
   useEffect(() => { void load(); }, [session]);
   if (loading) return <div className="space-y-3"><Skeleton className="h-24 w-full" /><Skeleton className="h-40 w-full" /></div>;
-  return <div className="space-y-6">{error && <div className="rounded-sm border border-destructive/20 bg-destructive/10 p-3 text-sm text-destructive">{error}</div>}<div className="flex justify-end"><Button variant="outline" size="sm" onClick={() => void load()}><RefreshCw size={14} /> Atualizar</Button></div><Card><CardHeader><CardTitle>Ordens recentes</CardTitle><CardDescription>{orders.length} ordens encontradas na sua Conta.</CardDescription></CardHeader><CardContent className="p-0"><Table><TableHeader><TableRow><TableHead>Referência</TableHead><TableHead>Tipo</TableHead><TableHead>Status</TableHead><TableHead>Criada em</TableHead></TableRow></TableHeader><TableBody>{orders.slice(0, 50).map((order) => <TableRow key={order.id}><TableCell><strong>{order.referencia_externa}</strong><span className="block text-xs text-muted-foreground">{order.sistema_cliente}</span></TableCell><TableCell>{order.tipo_pesagem}</TableCell><TableCell><Badge variant={order.status === "CONCLUIDA" ? "success" : "secondary"}>{order.status}</Badge></TableCell><TableCell>{formatDate(order.created_at)}</TableCell></TableRow>)}{!orders.length && <TableRow><TableCell colSpan={4} className="py-8 text-center text-muted-foreground">Nenhuma ordem encontrada.</TableCell></TableRow>}</TableBody></Table></CardContent></Card><Card><CardHeader><CardTitle>Pesagens recentes</CardTitle></CardHeader><CardContent className="p-0"><Table><TableHeader><TableRow><TableHead>Capturada em</TableHead><TableHead>ID local</TableHead><TableHead>Peso</TableHead><TableHead>Reconciliação</TableHead></TableRow></TableHeader><TableBody>{weighings.slice(0, 50).map((item) => <TableRow key={item.id}><TableCell>{formatDate(item.captured_at)}</TableCell><TableCell><code className="text-xs">{item.local_id}</code></TableCell><TableCell>{item.peso_aferido_kg} kg</TableCell><TableCell><Badge variant={item.reconciliation_status === "VINCULADA" ? "success" : "secondary"}>{item.reconciliation_status}</Badge></TableCell></TableRow>)}{!weighings.length && <TableRow><TableCell colSpan={4} className="py-8 text-center text-muted-foreground">Nenhuma pesagem encontrada.</TableCell></TableRow>}</TableBody></Table></CardContent></Card></div>;
+  const visibleOrders = orders.filter((order) => (status === "TODOS" || order.status === status) && `${order.referencia_externa} ${order.sistema_cliente} ${order.tipo_pesagem}`.toLowerCase().includes(query.toLowerCase()));
+  return <div className="space-y-6">{error && <div className="rounded-sm border border-destructive/20 bg-destructive/10 p-3 text-sm text-destructive">{error}</div>}<div className="flex flex-col gap-3 sm:flex-row"><Input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar referência, sistema ou tipo..." /><select value={status} onChange={(event) => setStatus(event.target.value)} className="h-9 rounded border bg-background px-3 text-sm sm:w-48"><option value="TODOS">Todos os status</option><option value="PENDENTE">Pendente</option><option value="EM_PESAGEM">Em pesagem</option><option value="CONCLUIDA">Concluída</option></select><Button variant="outline" size="sm" onClick={() => void load()}><RefreshCw size={14} /> Atualizar</Button></div><Card><CardHeader><CardTitle>Ordens de pesagem</CardTitle><CardDescription>{visibleOrders.length} ordem(ns) encontradas para o filtro atual.</CardDescription></CardHeader><CardContent className="p-0"><Table><TableHeader><TableRow><TableHead>Referência</TableHead><TableHead>Tipo</TableHead><TableHead>Status</TableHead><TableHead>Criada em</TableHead></TableRow></TableHeader><TableBody>{visibleOrders.slice(0, 100).map((order) => <TableRow key={order.id}><TableCell><strong>{order.referencia_externa}</strong><span className="block text-xs text-muted-foreground">{order.sistema_cliente}</span></TableCell><TableCell>{order.tipo_pesagem}</TableCell><TableCell><Badge variant={order.status === "CONCLUIDA" ? "success" : "secondary"}>{order.status}</Badge></TableCell><TableCell>{formatDate(order.created_at)}</TableCell></TableRow>)}{!visibleOrders.length && <TableRow><TableCell colSpan={4} className="py-8 text-center text-muted-foreground">Nenhuma ordem encontrada.</TableCell></TableRow>}</TableBody></Table></CardContent></Card><Card><CardHeader><CardTitle>Pesagens recentes</CardTitle><CardDescription>{weighings.length} pesagem(ns) registradas na Conta.</CardDescription></CardHeader><CardContent className="p-0"><Table><TableHeader><TableRow><TableHead>Capturada em</TableHead><TableHead>ID local</TableHead><TableHead>Peso</TableHead><TableHead>Reconciliação</TableHead></TableRow></TableHeader><TableBody>{weighings.slice(0, 100).map((item) => <TableRow key={item.id}><TableCell>{formatDate(item.captured_at)}</TableCell><TableCell><code className="text-xs">{item.local_id}</code></TableCell><TableCell>{item.peso_aferido_kg} kg</TableCell><TableCell><Badge variant={item.reconciliation_status === "VINCULADA" ? "success" : "secondary"}>{item.reconciliation_status}</Badge></TableCell></TableRow>)}</TableBody></Table></CardContent></Card></div>;
 }
 
 function PortalUsersPanel({ session }: { session: Session }) {
@@ -81,8 +82,8 @@ function PortalUsersPanel({ session }: { session: Session }) {
 }
 
 function Dashboard({ session, onSignOut }: { session: Session; onSignOut: () => void }) {
-  const [view, setView] = useState<"api-keys" | "webhook" | "atividade" | "usuarios">("api-keys"); const [clients, setClients] = useState<ApiClient[]>([]); const [credential, setCredential] = useState<NewCredential | null>(null); const [error, setError] = useState<string | null>(null); const [loading, setLoading] = useState(true); const [showForm, setShowForm] = useState(false); const [dark, setDark] = useState(false);
-  async function load() { setLoading(true); setError(null); try { setClients(await listApiClients(session)); } catch (cause) { setError(cause instanceof Error ? cause.message : "Falha ao carregar credenciais."); } finally { setLoading(false); } }
+  const [view, setView] = useState<"overview" | "api-keys" | "webhook" | "atividade" | "usuarios">("overview"); const [clients, setClients] = useState<ApiClient[]>([]); const [dashboard, setDashboard] = useState<AccountDashboard | null>(null); const [credential, setCredential] = useState<NewCredential | null>(null); const [error, setError] = useState<string | null>(null); const [loading, setLoading] = useState(true); const [showForm, setShowForm] = useState(false); const [dark, setDark] = useState(false);
+  async function load() { setLoading(true); setError(null); try { const [nextClients, nextDashboard] = await Promise.all([listApiClients(session), getPortalDashboard(session)]); setClients(nextClients); setDashboard(nextDashboard); } catch (cause) { setError(cause instanceof Error ? cause.message : "Falha ao carregar o resumo da Conta."); } finally { setLoading(false); } }
   useEffect(() => { void load(); }, []);
   return (
     <SidebarProvider>
@@ -110,6 +111,11 @@ function Dashboard({ session, onSignOut }: { session: Session; onSignOut: () => 
               <SidebarGroupContent>
                 <SidebarMenu>
                   <SidebarMenuItem>
+                    <SidebarMenuButton isActive={view === "overview"} tooltip="Visão geral" onClick={() => setView("overview")}>
+                      <Gauge /> <span>Visão geral</span>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                  <SidebarMenuItem>
                     <SidebarMenuButton isActive={view === "webhook"} tooltip="Webhook" onClick={() => setView("webhook")}>
                       <ShieldCheck /> <span>Webhook</span>
                     </SidebarMenuButton>
@@ -121,7 +127,7 @@ function Dashboard({ session, onSignOut }: { session: Session; onSignOut: () => 
                   </SidebarMenuItem>
                   <SidebarMenuItem>
                     <SidebarMenuButton isActive={view === "atividade"} tooltip="Atividade" onClick={() => setView("atividade")}>
-                      <Activity /> <span>Atividade</span>
+                      <ClipboardList /> <span>Processos</span>
                     </SidebarMenuButton>
                   </SidebarMenuItem>
                   <SidebarMenuItem>
@@ -159,6 +165,7 @@ function Dashboard({ session, onSignOut }: { session: Session; onSignOut: () => 
             </div>
           </header>
           <div className="flex-1 p-6 overflow-auto">
+            {view === "overview" && <PortalOverview dashboard={dashboard} loading={loading} onRefresh={() => void load()} onProcesses={() => setView("atividade")} />}
             {view === "api-keys" && (
               <div className="space-y-6">
                 <PageHeader eyebrow="Portal / Integrações" title="API Keys" description="Administre as credenciais usadas pelos sistemas da sua conta." actions={<Button variant="default" onClick={() => setShowForm(true)}><Plus className="size-4 mr-2" /> Nova API Key</Button>} />
@@ -181,7 +188,7 @@ function Dashboard({ session, onSignOut }: { session: Session; onSignOut: () => 
             )}
             {view === "atividade" && (
               <div className="space-y-6">
-                <PageHeader eyebrow="Portal / Integrações" title="Atividade" description="Acompanhe o histórico de atividades da sua conta." />
+                <PageHeader eyebrow="Portal / Operação" title="Processos" description="Filtre e acompanhe as ordens e pesagens da sua Conta." />
                 <PortalActivity session={session} />
               </div>
             )}
@@ -199,6 +206,11 @@ function Dashboard({ session, onSignOut }: { session: Session; onSignOut: () => 
       {credential && <CredentialDialog credential={credential} onClose={() => setCredential(null)} />}
     </SidebarProvider>
   );
+}
+function PortalOverview({ dashboard, loading, onRefresh, onProcesses }: { dashboard: AccountDashboard | null; loading: boolean; onRefresh: () => void; onProcesses: () => void }) {
+  if (loading || !dashboard) return <div className="space-y-6"><PageHeader eyebrow="Portal / Operação" title="Visão geral" description="Indicadores gerenciais da sua Conta." actions={<Button variant="outline" size="sm" onClick={onRefresh}><RefreshCw size={14} /> Atualizar</Button>} /><div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">{[1, 2, 3, 4].map((item) => <Skeleton className="h-28" key={item} />)}</div></div>;
+  const completion = dashboard.orders_total ? Math.round((dashboard.orders_completed / dashboard.orders_total) * 100) : 0;
+  return <div className="space-y-6"><PageHeader eyebrow="Portal / Operação" title="Visão geral" description={`Acompanhe os processos e a saúde operacional de ${dashboard.account_name}.`} actions={<Button variant="outline" size="sm" onClick={onRefresh}><RefreshCw size={14} /> Atualizar</Button>} /><div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4"><Metric label="Ordens" value={dashboard.orders_total} icon={<ClipboardList size={16} />} /><Metric label="Taxa de conclusão" value={`${completion}%`} icon={<Activity size={16} />} /><Metric label="Pesagens" value={dashboard.weighings_total} icon={<Gauge size={16} />} /><Metric label="API Keys ativas" value={dashboard.api_keys_active} icon={<KeyRound size={16} />} /></div><div className="grid gap-6 lg:grid-cols-2"><Card><CardHeader><CardTitle>Saúde operacional</CardTitle><CardDescription>Itens que merecem atenção da sua equipe.</CardDescription></CardHeader><CardContent className="space-y-4"><div className="flex items-center gap-3"><Wifi className="size-4 text-primary" /><span className="flex-1 text-sm">Estações ativas</span><strong>{dashboard.stations_active}/{dashboard.stations_total}</strong></div><div className="flex items-center gap-3"><Users className="size-4 text-primary" /><span className="flex-1 text-sm">Operadores ativos</span><strong>{dashboard.operators_active}</strong></div><div className="flex items-center gap-3"><Activity className="size-4 text-primary" /><span className="flex-1 text-sm">Eventos pendentes</span><strong className={dashboard.events_pending ? "text-amber-600" : "text-emerald-600"}>{dashboard.events_pending}</strong></div><div className="flex items-center gap-3"><RotateCw className="size-4 text-primary" /><span className="flex-1 text-sm">Reconciliações pendentes</span><strong className={dashboard.weighings_pending ? "text-amber-600" : "text-emerald-600"}>{dashboard.weighings_pending}</strong></div></CardContent></Card><Card><CardHeader><CardTitle>Gestão de processos</CardTitle><CardDescription>Consulte os registros operacionais da sua Conta.</CardDescription></CardHeader><CardContent className="space-y-4"><p className="text-sm text-muted-foreground">Há {dashboard.orders_open} ordem(ns) em aberto e {dashboard.weighings_total} pesagem(ns) registradas.</p><Button onClick={onProcesses}><ClipboardList size={16} /> Abrir processos</Button></CardContent></Card></div></div>;
 }
 function Metric({ label, value, icon }: { label: string; value: number | string; icon: React.ReactNode }) { return <Card><CardHeader className="flex flex-row items-center justify-between"><CardTitle className="text-sm text-muted-foreground">{label}</CardTitle><span className="text-primary">{icon}</span></CardHeader><CardContent><strong className="text-2xl font-semibold tracking-tight">{value}</strong><p className="mt-1 text-xs text-muted-foreground">Dados da sua conta</p></CardContent></Card>; }
 function EmptyState({ onCreate }: { onCreate: () => void }) { return <div className="grid min-h-64 place-items-center gap-2 p-8 text-center"><KeyRound className="size-8 text-primary/50" /><strong className="text-sm">Nenhuma credencial ainda</strong><p className="text-sm text-muted-foreground">Crie uma API Key para conectar seu sistema.</p><Button variant="outline" onClick={onCreate}>Criar primeira chave</Button></div>; }
