@@ -51,6 +51,7 @@ psql -h 192.168.0.3 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/014_o
 psql -h 192.168.0.3 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/015_webhook_retry_policy.sql
 psql -h 192.168.0.3 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/016_platform_dashboard_rls.sql
 psql -h 192.168.0.3 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/017_pesagem_station.sql
+psql -h 192.168.0.3 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/018_table_comments.sql
 ```
 
 Configure `service/.env`, principalmente `TARA_DATABASE_URL`,
@@ -271,6 +272,7 @@ psql -h 192.168.0.3 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/014_o
 psql -h 192.168.0.3 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/015_webhook_retry_policy.sql
 psql -h 192.168.0.3 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/016_platform_dashboard_rls.sql
 psql -h 192.168.0.3 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/017_pesagem_station.sql
+psql -h 192.168.0.3 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/018_table_comments.sql
 ```
 
 Inicie a API:

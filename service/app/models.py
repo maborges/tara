@@ -17,7 +17,7 @@ class Usuario(Base):
     __tablename__ = "usuarios"
     __table_args__ = (
         UniqueConstraint("tenant_id", "login", name="uq_TARA_usuarios_login"),
-        {"schema": "tara"},
+        {"schema": "tara", "comment": "Usuários internos autenticados da operação e do backoffice, associados a uma Conta."},
     )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
@@ -35,7 +35,7 @@ class AdministradorPlataforma(Base):
     __table_args__ = (
         UniqueConstraint("login", name="uq_TARA_platform_admin_login"),
         UniqueConstraint("usuario_id", name="uq_TARA_platform_admin_usuario"),
-        {"schema": "tara"},
+        {"schema": "tara", "comment": "Administradores globais autorizados a operar a plataforma sem seleção prévia de tenant."},
     )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
@@ -55,7 +55,7 @@ class Papel(Base):
     __tablename__ = "papeis"
     __table_args__ = (
         UniqueConstraint("tenant_id", "codigo", name="uq_TARA_papeis_codigo"),
-        {"schema": "tara"},
+        {"schema": "tara", "comment": "Papéis de acesso que agrupam permissões atribuíveis a usuários de uma Conta."},
     )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
@@ -69,7 +69,7 @@ class Permissao(Base):
     __tablename__ = "permissoes"
     __table_args__ = (
         UniqueConstraint("tenant_id", "codigo", name="uq_TARA_permissoes_codigo"),
-        {"schema": "tara"},
+        {"schema": "tara", "comment": "Permissões atômicas que representam capacidades autorizáveis na aplicação."},
     )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
@@ -82,7 +82,7 @@ class UsuarioPapel(Base):
     __tablename__ = "usuario_papeis"
     __table_args__ = (
         UniqueConstraint("usuario_id", "papel_id", name="uq_TARA_usuario_papel"),
-        {"schema": "tara"},
+        {"schema": "tara", "comment": "Tabela associativa entre usuários e papéis de acesso."},
     )
 
     usuario_id: Mapped[uuid.UUID] = mapped_column(
@@ -97,7 +97,7 @@ class PapelPermissao(Base):
     __tablename__ = "papel_permissoes"
     __table_args__ = (
         UniqueConstraint("papel_id", "permissao_id", name="uq_TARA_papel_permissao"),
-        {"schema": "tara"},
+        {"schema": "tara", "comment": "Tabela associativa entre papéis e permissões."},
     )
 
     papel_id: Mapped[uuid.UUID] = mapped_column(
@@ -112,7 +112,7 @@ class ApiClient(Base):
     __tablename__ = "api_clients"
     __table_args__ = (
         UniqueConstraint("client_id", name="uq_TARA_api_clients_client_id"),
-        {"schema": "tara"},
+        {"schema": "tara", "comment": "Credenciais técnicas de sistemas consumidores, com escopos e estado de acesso."},
     )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
@@ -131,7 +131,7 @@ class ApiClientSecret(Base):
     __tablename__ = "api_client_secrets"
     __table_args__ = (
         UniqueConstraint("api_client_id", "version", name="uq_TARA_api_client_secret_version"),
-        {"schema": "tara"},
+        {"schema": "tara", "comment": "Versões de segredos de API mantidas para rotação de credenciais sem indisponibilidade."},
     )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
@@ -147,7 +147,7 @@ class ApiClientSecret(Base):
 
 class Conta(Base):
     __tablename__ = "contas"
-    __table_args__ = {"schema": "tara"}
+    __table_args__ = {"schema": "tara", "comment": "Organizações consumidoras da plataforma e unidade principal de isolamento dos dados."}
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
     tenant_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False, unique=True)
@@ -159,7 +159,7 @@ class WebhookDestination(Base):
     __tablename__ = "webhook_destinations"
     __table_args__ = (
         UniqueConstraint("conta_id", name="uq_TARA_webhook_destination_account"),
-        {"schema": "tara"},
+        {"schema": "tara", "comment": "Destino HTTP configurado por uma Conta para receber eventos publicados pela plataforma."},
     )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
@@ -177,7 +177,7 @@ class WebhookDestination(Base):
 
 class OutboxReplayAudit(Base):
     __tablename__ = "outbox_replay_audits"
-    __table_args__ = {"schema": "tara"}
+    __table_args__ = {"schema": "tara", "comment": "Auditoria das solicitações de replay de eventos já registrados na outbox."}
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
     tenant_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
@@ -193,7 +193,7 @@ class PortalUser(Base):
     __table_args__ = (
         UniqueConstraint("email", name="uq_TARA__PORTal_user_email"),
         UniqueConstraint("usuario_id", name="uq_TARA__PORTal_user_usuario"),
-        {"schema": "tara"},
+        {"schema": "tara", "comment": "Usuários do Portal do Cliente, vinculados a uma Conta e às suas credenciais de acesso."},
     )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
@@ -218,7 +218,7 @@ class PortalToken(Base):
     __tablename__ = "portal_tokens"
     __table_args__ = (
         UniqueConstraint("token_hash", name="uq_TARA__PORTal_token_hash"),
-        {"schema": "tara"},
+        {"schema": "tara", "comment": "Tokens temporários do Portal usados para confirmação de e-mail e recuperação de acesso."},
     )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
@@ -235,7 +235,7 @@ class PortalToken(Base):
 
 class PlatformSetting(Base):
     __tablename__ = "platform_settings"
-    __table_args__ = {"schema": "tara"}
+    __table_args__ = {"schema": "tara", "comment": "Configurações globais da plataforma, incluindo valores protegidos administrados pelo backoffice."}
 
     key: Mapped[str] = mapped_column(String(120), primary_key=True)
     value: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -248,7 +248,7 @@ class Cliente(Base):
     __tablename__ = "clientes"
     __table_args__ = (
         UniqueConstraint("tenant_id", "sistema_cliente", "tenant_cliente_id", name="uq_TARA_clientes_external_tenant"),
-        {"schema": "tara"},
+        {"schema": "tara", "comment": "Referências de clientes mantidas pela plataforma para correlacionar dados dos sistemas consumidores."},
     )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
@@ -262,7 +262,7 @@ class Cliente(Base):
 
 class Outbox(Base):
     __tablename__ = "eventos_outbox"
-    __table_args__ = {"schema": "tara"}
+    __table_args__ = {"schema": "tara", "comment": "Eventos de integração persistidos para entrega assíncrona e confiável aos sistemas consumidores."}
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
     tenant_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
@@ -287,7 +287,7 @@ class Estacao(Base):
     __tablename__ = "estacoes"
     __table_args__ = (
         UniqueConstraint("tenant_id", "external_id", name="uq_TARA_estacoes_external"),
-        {"schema": "tara"},
+        {"schema": "tara", "comment": "Estações de pesagem autorizadas a capturar medições e sincronizar dados com a plataforma."},
     )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
@@ -308,7 +308,7 @@ class Operador(Base):
     __tablename__ = "operadores"
     __table_args__ = (
         UniqueConstraint("tenant_id", "codigo", name="uq_TARA_operadores_codigo"),
-        {"schema": "tara"},
+        {"schema": "tara", "comment": "Pessoas autorizadas a executar e identificar operações na estação de pesagem."},
     )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
@@ -326,7 +326,7 @@ class Ordem(Base):
     __table_args__ = (
         UniqueConstraint("tenant_id", "sistema_cliente", "referencia_externa", name="uq_TARA_ordens_external"),
         Index("ix_TARA_ordens_status", "tenant_id", "status"),
-        {"schema": "tara"},
+        {"schema": "tara", "comment": "Solicitações operacionais que orientam pesagens e correlacionam a operação com o sistema consumidor."},
     )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
@@ -350,7 +350,7 @@ class Pesagem(Base):
     __table_args__ = (
         UniqueConstraint("tenant_id", "local_id", name="uq_TARA_pesagens_local"),
         UniqueConstraint("ordem_id", "etapa", name="uq_TARA_pesagens_ordem_etapa"),
-        {"schema": "tara"},
+        {"schema": "tara", "comment": "Registro imutável de uma medição realizada na balança, vinculada ou avulsa, com suas evidências."},
     )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
@@ -378,7 +378,7 @@ class ContingenciaLote(Base):
     __table_args__ = (
         UniqueConstraint("tenant_id", "package_id", name="uq_TARA_contingencia_package"),
         UniqueConstraint("tenant_id", "station_id", "sequence_number", name="uq_TARA_contingencia_sequence"),
-        {"schema": "tara"},
+        {"schema": "tara", "comment": "Pacotes assinados de capturas transportados em contingência para importação posterior."},
     )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
@@ -401,7 +401,7 @@ class ContingenciaItem(Base):
     __tablename__ = "contingencia_itens"
     __table_args__ = (
         UniqueConstraint("tenant_id", "local_id", name="uq_TARA_contingencia_local"),
-        {"schema": "tara"},
+        {"schema": "tara", "comment": "Itens individuais de captura contidos em um lote de contingência e seu resultado de importação."},
     )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)

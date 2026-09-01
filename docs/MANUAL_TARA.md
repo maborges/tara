@@ -80,6 +80,7 @@ psql --set=ON_ERROR_STOP=1 "$TARA_DATABASE_URL" -f migrations/014_outbox_replay_
 psql --set=ON_ERROR_STOP=1 "$TARA_DATABASE_URL" -f migrations/015_webhook_retry_policy.sql
 psql --set=ON_ERROR_STOP=1 "$TARA_DATABASE_URL" -f migrations/016_platform_dashboard_rls.sql
 psql --set=ON_ERROR_STOP=1 "$TARA_DATABASE_URL" -f migrations/017_pesagem_station.sql
+psql --set=ON_ERROR_STOP=1 "$TARA_DATABASE_URL" -f migrations/018_table_comments.sql
 ./start_server.sh
 ```
 
