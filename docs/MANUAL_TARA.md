@@ -81,6 +81,8 @@ psql --set=ON_ERROR_STOP=1 "$TARA_DATABASE_URL" -f migrations/015_webhook_retry_
 psql --set=ON_ERROR_STOP=1 "$TARA_DATABASE_URL" -f migrations/016_platform_dashboard_rls.sql
 psql --set=ON_ERROR_STOP=1 "$TARA_DATABASE_URL" -f migrations/017_pesagem_station.sql
 psql --set=ON_ERROR_STOP=1 "$TARA_DATABASE_URL" -f migrations/018_table_comments.sql
+psql --set=ON_ERROR_STOP=1 "$TARA_DATABASE_URL" -f migrations/023_credential_lookup_without_tenant.sql
+psql --set=ON_ERROR_STOP=1 "$TARA_DATABASE_URL" -f migrations/024_remove_duplicate_api_client_secret_hash.sql
 ./start_server.sh
 ```
 
@@ -130,12 +132,14 @@ NEXT_PUBLIC_TARA_API_URL=http://localhost:8010 pnpm backoffice:dev
 
 No backoffice da Balança:
 
-1. Cadastre os operadores e seus PINs.
+1. Cadastre os operadores pelo Portal/API e informe o identificador externo.
 2. Cadastre cada estação com um `external_id` único.
-3. Cadastre uma credencial para cada sistema consumidor.
-4. Atribua somente os escopos necessários.
-5. Ative a estação usando o código de ativação.
-6. Teste uma pesagem antes do início do turno.
+3. Associe somente os operadores autorizados a cada estação.
+4. Cadastre uma credencial para cada sistema consumidor.
+5. Atribua somente os escopos necessários.
+6. Ative a estação usando o código de ativação e guarde a credencial de recuperação exibida uma única vez.
+7. Execute uma sincronização para provisionar operadores e credenciais locais.
+8. Teste uma pesagem antes do início do turno.
 
 Os escopos de integração disponíveis são:
 
@@ -195,7 +199,7 @@ Antes do turno, confirme na estação o indicador “Balança conectada”.
 
 ## 9. Pesagem normal
 
-1. Faça login do operador usando o PIN da Balança.
+1. Faça login do operador usando sua senha pessoal; após o provisionamento, o login funciona offline.
 2. Selecione a ordem pendente.
 3. Confira veículo, animal, placa, produto e etapa.
 4. Aguarde o peso estabilizar.
@@ -216,6 +220,21 @@ Sem internet, a estação:
 - mantém a fila de sincronização;
 - permite reprocessar falhas;
 - não deve apagar os dados locais.
+
+### Primeiro acesso e recuperação offline
+
+Cada estação possui uma credencial de recuperação própria. Ela não substitui a
+senha pessoal do operador e não pode cadastrar operadores que não estejam no
+provisionamento local. O administrador pode fornecê-la ao operador autorizado
+para ativar seu primeiro acesso ou redefinir sua senha. O operador deve definir
+uma nova senha pessoal imediatamente. O uso da credencial é auditado e enviado
+ao serviço quando a conexão retornar; a credencial nunca deve ser colocada em
+logs ou compartilhada entre estações.
+
+O Portal oferece `GET/POST /v1/portal/operators`, `GET /v1/portal/stations`,
+`PUT /v1/portal/stations/{station_id}/operators/{operator_id}` e a rotação da
+credencial em `POST /v1/portal/stations/{station_id}/recovery-credential/rotate`.
+O segredo de recuperação é retornado somente na ativação ou rotação.
 
 Quando a conexão retornar, a estação enviará a fila automaticamente. O serviço
 usa `local_id` e chaves de idempotência para impedir duplicidade.

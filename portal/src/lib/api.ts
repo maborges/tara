@@ -25,12 +25,19 @@ export interface NewCredential {
   expires_at: string | null;
 }
 
-export interface PortalMe { user_id: string; account_id: string; tenant_id: string; nome_conta: string; nome_exibicao: string; email: string; role: string; }
+export interface ApiClientConfiguration {
+  client_id: string;
+  account_id: string;
+  sistemas_clientes: { sistema_cliente: string; tenant_cliente_id: string; nome_exibicao: string; status: string }[];
+}
+
+export interface PortalMe { user_id: string; account_id: string; nome_conta: string; nome_exibicao: string; email: string; role: string; }
 export interface WebhookDestination { target_url: string; status: string; event_types: string[]; configured: boolean; updated_at: string; max_attempts: number; retry_base_seconds: number; }
 export interface PortalOrder { id: string; sistema_cliente: string; referencia_externa: string; subject_type: string; tipo_pesagem: string; status: string; peso_liquido_kg: string | number | null; created_at: string; concluida_em: string | null; }
 export interface PortalWeighing { id: string; ordem_id: string | null; local_id: string; etapa: string; peso_aferido_kg: string | number; captured_at: string; reconciliation_status: string; }
 export interface PortalUser { id: string; email: string; nome_exibicao: string; role: string; status: string; created_at: string; }
 export interface AccountDashboard { account_id: string; account_name: string; account_status: string; owner_email: string | null; owner_name: string | null; accounts_total: number; accounts_by_status: Record<string, number>; clients_total: number; api_keys_active: number; orders_total: number; orders_open: number; orders_completed: number; weighings_total: number; weighings_pending: number; stations_total: number; stations_active: number; operators_active: number; events_total: number; events_pending: number; client_systems: { client_id: string; nome: string; status: string; last_used_at: string | null }[]; }
+export interface PlatformSecuritySettings { session_minutes: number; idle_minutes: number; refresh_enabled: boolean; warning_minutes: number; }
 
 interface AuthResponse {
   access_token: string;
@@ -58,6 +65,10 @@ export async function authenticate(email: string, password: string): Promise<Ses
     body: JSON.stringify({ login: email, password }),
   });
   const data = await parseResponse<AuthResponse>(response);
+  return toSession(data);
+}
+export async function refreshSession(session: Session) {
+  const data = await apiFetch<AuthResponse>("/v1/portal/auth/refresh", session, { method: "POST" });
   return toSession(data);
 }
 
@@ -121,6 +132,10 @@ export async function listApiClients(session: Session) {
   return apiFetch<ApiClient[]>("/v1/portal/api-clients", session);
 }
 
+export async function getApiClientConfiguration(session: Session, clientId: string) {
+  return apiFetch<ApiClientConfiguration>(`/v1/portal/api-clients/${encodeURIComponent(clientId)}/configuration`, session);
+}
+
 export async function createApiClient(session: Session, payload: { nome: string; scopes: string[]; expires_at: string | null }) {
   return apiFetch<NewCredential>("/v1/portal/api-clients", session, { method: "POST", body: JSON.stringify(payload) });
 }
@@ -135,10 +150,14 @@ export async function revokeApiClient(session: Session, clientId: string) {
 
 export async function getPortalMe(session: Session) { return apiFetch<PortalMe>("/v1/portal/me", session); }
 export async function getPortalDashboard(session: Session) { return apiFetch<AccountDashboard>("/v1/portal/dashboard", session); }
+export async function getPortalSessionPolicy(session: Session) { return apiFetch<PlatformSecuritySettings>("/v1/portal/session-policy", session); }
 export async function updatePortalMe(session: Session, payload: { nome_conta: string; nome_exibicao: string }) { return apiFetch<PortalMe>("/v1/portal/me", session, { method: "PUT", body: JSON.stringify(payload) }); }
 export async function sendApiKeyRecoveryEmail(session: Session, clientId: string) { return apiFetch<{ message: string }>(`/v1/portal/api-clients/${encodeURIComponent(clientId)}/send-recovery-email`, session, { method: "POST" }); }
 export async function getWebhookDestination(session: Session) { return apiFetch<WebhookDestination>("/v1/portal/webhook", session); }
 export async function saveWebhookDestination(session: Session, payload: { target_url: string; hmac_secret: string | null; event_types: string[]; max_attempts: number; retry_base_seconds: number }) { return apiFetch<WebhookDestination>("/v1/portal/webhook", session, { method: "PUT", body: JSON.stringify(payload) }); }
+export async function testWebhookDestination(session: Session) { return apiFetch<{ accepted: boolean; status_code: number | null; message: string }>("/v1/portal/webhook/test", session, { method: "POST" }); }
+export async function disableWebhookDestination(session: Session) { return apiFetch<{ message: string }>("/v1/portal/webhook", session, { method: "DELETE" }); }
+export async function setWebhookStatus(session: Session, enabled: boolean) { return apiFetch<WebhookDestination>("/v1/portal/webhook/status", session, { method: "PATCH", body: JSON.stringify({ enabled }) }); }
 export async function listPortalOrders(session: Session) { return apiFetch<PortalOrder[]>("/v1/portal/orders", session); }
 export async function listPortalWeighings(session: Session) { return apiFetch<PortalWeighing[]>("/v1/portal/weighings", session); }
 export async function listPortalUsers(session: Session) { return apiFetch<PortalUser[]>("/v1/portal/users", session); }

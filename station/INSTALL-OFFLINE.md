@@ -1,20 +1,24 @@
 # Instalação e atualização offline da estação
 
-A estação é uma PWA instalada no navegador da estação de pesagem. A primeira
-ativação exige conexão para registrar o dispositivo e receber o token; depois
-da ativação, a captura de peso, a troca de operador já sincronizado e a fila
-local funcionam sem internet.
+A estação é uma PWA instalada no navegador da estação de pesagem. O pacote de
+instalação contém o build e as dependências da aplicação e pode ser levado por
+pendrive. A ativação e o primeiro provisionamento exigem conexão uma vez;
+depois, a captura, o login e a troca de operador provisionado funcionam sem
+internet.
 
 ## Procedimento operacional
 
-1. Com a rede disponível, abrir a URL publicada da estação e ativar o terminal.
-2. Aguardar a primeira sincronização e confirmar que os operadores e ordens
+1. No computador de empacotamento, execute `pnpm package:offline`.
+2. Copie o diretório gerado para a estação por pendrive ou rede local.
+3. Instale/atualize a aplicação usando o `INSTALL.txt` do pacote.
+4. Com a rede disponível, abrir a URL publicada da estação e ativar o terminal.
+5. Aguardar a primeira sincronização e confirmar que os operadores e ordens
    do terminal aparecem no cache local.
-3. Instalar pelo navegador ("Instalar aplicação") e manter a URL nos favoritos
+6. Instalar pelo navegador ("Instalar aplicação") e manter a URL nos favoritos
    como contingência.
-4. Testar uma pesagem com a rede desligada; o ticket local e a fila devem
+7. Testar uma pesagem com a rede desligada; o ticket local e a fila devem
    permanecer disponíveis.
-5. Ao restabelecer a rede, aguardar a sincronização ou usar "Reprocessar falhas".
+8. Ao restabelecer a rede, aguardar a sincronização ou usar "Reprocessar falhas".
 
 Se a rede permanecer indisponível, usar "Exportar contingência" e copiar o
 arquivo `.balanca.json` para um pendrive. O arquivo deve ser importado no

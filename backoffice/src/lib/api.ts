@@ -14,6 +14,7 @@ export interface Weighing { id: string; ordem_id: string | null; local_id: strin
 export interface ApiClient { client_id: string; nome: string; scopes: string[]; status: string; expires_at: string | null; created_at: string; last_used_at: string | null; }
 export interface NewCredential { client_id: string; client_secret: string; nome: string; scopes: string[]; expires_at: string | null; }
 export interface PlatformEmailSettings { enabled: boolean; smtp_host: string | null; smtp_port: number; smtp_username: string | null; smtp_password_configured: boolean; smtp_from: string; smtp_starttls: boolean; smtp_ssl: boolean; }
+export interface PlatformSecuritySettings { session_minutes: number; idle_minutes: number; refresh_enabled: boolean; warning_minutes: number; }
 
 const API_URL = (process.env.NEXT_PUBLIC_TARA_API_URL || "http://localhost:8010").replace(/\/$/, "");
 
@@ -32,9 +33,22 @@ export async function apiFetch<T>(path: string, session: Session, init: RequestI
 }
 
 export async function login(loginValue: string, password: string) {
-  const response = await fetch(`${API_URL}/v1/auth/login`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ login: loginValue, password }) });
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), 15000);
+  let response: Response;
+  try {
+    response = await fetch(`${API_URL}/v1/auth/login`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ login: loginValue, password }), signal: controller.signal });
+  } catch (cause) {
+    if (cause instanceof DOMException && cause.name === "AbortError") throw new Error("Tempo limite excedido ao conectar ao serviço. Verifique se a API está em execução.");
+    throw new Error("Não foi possível conectar ao serviço. Verifique a URL da API e sua rede.");
+  } finally {
+    window.clearTimeout(timeout);
+  }
   if (!response.ok) { const body = await response.json().catch(() => ({})); throw new Error(body.detail || "Não foi possível entrar."); }
   return response.json() as Promise<{ access_token: string; tenant_id: string; permissions: string[]; expires_in: number }>;
+}
+export async function refreshSession(session: Session) {
+  return apiFetch<{ access_token: string; tenant_id: string; permissions: string[]; expires_in: number }>("/v1/auth/refresh", session, { method: "POST" });
 }
 
 export async function getPlatformEmailSettings(session: Session) { return apiFetch<PlatformEmailSettings>("/v1/platform/email", session); }
@@ -44,6 +58,8 @@ export async function getAccountDashboard(session: Session, accountId: string) {
 export async function updatePlatformAccount(session: Session, accountId: string, payload: { nome: string; status: string }) { return apiFetch<PlatformAccount>(`/v1/platform/accounts/${encodeURIComponent(accountId)}`, session, { method: "PUT", body: JSON.stringify(payload) }); }
 export async function savePlatformEmailSettings(session: Session, payload: { enabled: boolean; smtp_host: string | null; smtp_port: number; smtp_username: string | null; smtp_password: string | null; smtp_from: string; smtp_starttls: boolean; smtp_ssl: boolean }) { return apiFetch<PlatformEmailSettings>("/v1/platform/email", session, { method: "PUT", body: JSON.stringify(payload) }); }
 export async function testPlatformEmail(session: Session, recipient: string) { return apiFetch<void>("/v1/platform/email/test", session, { method: "POST", body: JSON.stringify({ recipient }) }); }
+export async function getPlatformSecuritySettings(session: Session) { return apiFetch<PlatformSecuritySettings>("/v1/platform/security", session); }
+export async function savePlatformSecuritySettings(session: Session, payload: PlatformSecuritySettings) { return apiFetch<PlatformSecuritySettings>("/v1/platform/security", session, { method: "PUT", body: JSON.stringify(payload) }); }
 
 export async function createApiClient(session: Session, payload: { nome: string; scopes: string[]; expires_at: string | null }) {
   return apiFetch<NewCredential>("/v1/admin/api-clients", session, { method: "POST", body: JSON.stringify(payload) });

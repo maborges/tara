@@ -15,7 +15,6 @@ async function authHeaders(): Promise<HeadersInit> {
   }
   return {
     Authorization: `Bearer ${session.device_token}`,
-    "X-Tenant-ID": session.tenant_id,
   };
 }
 
@@ -54,6 +53,12 @@ export async function loginOperador(
   });
 }
 
+export async function hashLocalCredential(value: string): Promise<string> {
+  const bytes = new TextEncoder().encode(value);
+  const digest = await crypto.subtle.digest("SHA-256", bytes);
+  return Array.from(new Uint8Array(digest)).map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
 export async function ativarDispositivo(params: {
   activation_code: string;
   pin_hash: string;
@@ -66,6 +71,7 @@ export async function ativarDispositivo(params: {
     nome: string;
     fazenda_ids: string[];
     expires_at: string;
+    recovery_secret?: string;
   }>(
     "/api/v1/balanca/devices/activate",
     { method: "POST", body: JSON.stringify(params) },

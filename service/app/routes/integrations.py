@@ -8,10 +8,10 @@ from sqlalchemy import and_, or_, select
 from ..auth import get_session, require_station, set_tenant_context
 from ..security import require_backoffice, require_client_scope
 from ..config import get_settings
-from ..models import ApiClient, Cliente, Conta, Estacao, Operador, Ordem, Outbox, OutboxReplayAudit, Pesagem
+from ..models import ApiClient, Cliente, Conta, Estacao, EstacaoOperador, Operador, Ordem, Outbox, OutboxReplayAudit, Pesagem
 from ..schemas import (
-    ActivationIn, ActivationOut, AccountOut, ClientIn, ClientOut, EventOut, EventReplayAuditOut, OperatorIn, OperatorOut,
-    OrderIn, OrderOut, StationIn, StationOut, WeighingIn, WeighingOut, WeighingPageOut, WeighingReconciliationIn,
+    ActivationIn, ActivationOut, AccountOut, ClientIn, ClientOut, EventOut, EventReplayAuditOut, OperatorIn, OperatorOut, ProvisionedOperatorOut, StationProvisioningOut,
+    OrderIn, OrderOut, OrderPageOut, StationIn, StationOut, WeighingIn, WeighingOut, WeighingPageOut, WeighingReconciliationIn,
     SyncPushIn, SyncPushOut, SyncResultOut, OperatorLoginIn, LoginIn, LoginOut,
     ApiClientIn, ApiClientUpdateIn, ApiClientOut, ApiClientCredentialOut, ApiClientStatusOut, ApiClientListOut,
     ContingencyPackageIn, ContingencyImportOut,
@@ -23,8 +23,9 @@ from ..operation import (
 )
 from ..platform_identity import (
     create_api_client, get_account, login_backoffice, login_backoffice_without_tenant,
-    rotate_api_client, revoke_api_client, update_api_client,
+    rotate_api_client, revoke_api_client, update_api_client, load_security_settings,
 )
+from ..security import _permission_set, issue_backoffice_token
 
 router = APIRouter(prefix="/v1", tags=["Balança"])
 
@@ -55,13 +56,25 @@ async def post_login(
         await session.rollback()
         raise HTTPException(status_code=401, detail=str(exc)) from exc
     await session.commit()
+    security = await load_security_settings(session)
     return LoginOut(
         access_token=token,
-        expires_in=get_settings().jwt_access_minutes * 60,
+        expires_in=security["session_minutes"] * 60,
         user_id=user.id,
         tenant_id=tenant_id,
         permissions=sorted(permissions),
     )
+
+
+@router.post("/auth/refresh", response_model=LoginOut)
+async def post_refresh(context=Depends(require_backoffice())):
+    tenant_id, session, user = context
+    permissions = await _permission_set(session, user.id, tenant_id)
+    security = await load_security_settings(session)
+    if not security["refresh_enabled"]:
+        raise HTTPException(status_code=403, detail="Renovação automática de sessão desativada")
+    token = issue_backoffice_token(user, permissions, security["session_minutes"])
+    return LoginOut(access_token=token, user_id=user.id, tenant_id=tenant_id, permissions=sorted(permissions), expires_in=security["session_minutes"] * 60)
 
 
 @router.post("/admin/api-clients", response_model=ApiClientCredentialOut, status_code=201)
@@ -194,13 +207,48 @@ async def post_contingency_import(
 @router.post("/orders", response_model=OrderOut, status_code=201)
 async def post_order(data: OrderIn, context=Depends(require_client_scope("orders:write"))):
     tenant_id, session, _client = context
-    order = await create_order(session, tenant_id, data)
+    try:
+        order = await create_order(session, tenant_id, data)
+    except ValueError as exc:
+        await session.rollback()
+        if str(exc).startswith("CONFLICT:"):
+            raise HTTPException(status_code=409, detail=str(exc)[len("CONFLICT: "):]) from exc
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
     await session.commit()
     return order
 
 
-@router.get("/orders", response_model=list[OrderOut])
+@router.get("/orders", response_model=OrderPageOut)
 async def get_orders(
+    status: str | None = Query(default=None),
+    cursor: str | None = Query(default=None),
+    limit: int = Query(default=100, ge=1, le=500),
+    context=Depends(require_client_scope("orders:read")),
+):
+    tenant_id, session, _user = context
+    stmt = select(Ordem).where(Ordem.tenant_id == tenant_id)
+    if status:
+        stmt = stmt.where(Ordem.status == status.upper())
+    if cursor:
+        try:
+            decoded = json.loads(base64.urlsafe_b64decode(cursor.encode()).decode())
+            created_at = datetime.fromisoformat(decoded["created_at"])
+            order_id = uuid.UUID(decoded["id"])
+        except (ValueError, KeyError, TypeError, json.JSONDecodeError) as exc:
+            raise HTTPException(status_code=400, detail="Cursor inválido") from exc
+        stmt = stmt.where(or_(Ordem.created_at < created_at, and_(Ordem.created_at == created_at, Ordem.id < order_id)))
+    result = await session.execute(stmt.order_by(Ordem.created_at.desc(), Ordem.id.desc()).limit(limit + 1))
+    items = list(result.scalars())
+    next_cursor = None
+    if len(items) > limit:
+        last = items[limit - 1]
+        next_cursor = base64.urlsafe_b64encode(json.dumps({"created_at": last.created_at.isoformat(), "id": str(last.id)}, separators=(",", ":")).encode()).decode()
+        items = items[:limit]
+    return OrderPageOut(items=items, next_cursor=next_cursor)
+
+
+@router.get("/admin/orders", response_model=list[OrderOut])
+async def get_admin_orders(
     status: str | None = Query(default=None),
     context=Depends(require_backoffice("backoffice:ordens:gerenciar")),
 ):
@@ -344,12 +392,12 @@ async def post_station_activation(
 ):
     tenant_id, session, _client = context
     try:
-        station, token = await activate_station(session, tenant_id, data)
+        station, token, recovery_secret = await activate_station(session, tenant_id, data)
     except ValueError as exc:
         await session.rollback()
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     await session.commit()
-    return ActivationOut(station_id=station.id, station_token=token)
+    return ActivationOut(station_id=station.id, station_token=token, recovery_secret=recovery_secret)
 
 
 @router.post("/operators", response_model=OperatorOut, status_code=201)
@@ -392,13 +440,73 @@ async def post_revoke_operator(
     return operator
 
 
+@router.put("/stations/{station_id}/operators/{operator_id}")
+async def put_station_operator(
+    station_id: uuid.UUID, operator_id: uuid.UUID,
+    context=Depends(require_backoffice("backoffice:operadores:gerenciar")),
+):
+    tenant_id, session, _user = context
+    station = (await session.execute(select(Estacao).where(Estacao.id == station_id, Estacao.tenant_id == tenant_id))).scalar_one_or_none()
+    operator = (await session.execute(select(Operador).where(Operador.id == operator_id, Operador.tenant_id == tenant_id))).scalar_one_or_none()
+    if station is None or operator is None:
+        raise HTTPException(status_code=404, detail="Estação ou operador não encontrado")
+    link = (await session.execute(select(EstacaoOperador).where(
+        EstacaoOperador.estacao_id == station_id, EstacaoOperador.operador_id == operator_id
+    ))).scalar_one_or_none()
+    if link is None:
+        link = EstacaoOperador(estacao_id=station_id, operador_id=operator_id, tenant_id=tenant_id, status="ATIVO", created_at=datetime.utcnow())
+        session.add(link)
+    else:
+        link.status = "ATIVO"
+    await session.commit()
+    return {"station_id": station_id, "operator_id": operator_id, "status": link.status}
+
+
+@router.delete("/stations/{station_id}/operators/{operator_id}")
+async def delete_station_operator(
+    station_id: uuid.UUID, operator_id: uuid.UUID,
+    context=Depends(require_backoffice("backoffice:operadores:gerenciar")),
+):
+    tenant_id, session, _user = context
+    link = (await session.execute(select(EstacaoOperador).where(
+        EstacaoOperador.estacao_id == station_id, EstacaoOperador.operador_id == operator_id,
+        EstacaoOperador.tenant_id == tenant_id
+    ))).scalar_one_or_none()
+    if link is None:
+        raise HTTPException(status_code=404, detail="Autorização não encontrada")
+    link.status = "REVOGADO"
+    await session.commit()
+    return {"station_id": station_id, "operator_id": operator_id, "status": link.status}
+
+
 @router.get("/stations/operators", response_model=list[OperatorOut])
 async def get_station_operators(context=Depends(require_station)):
-    tenant_id, session, _station = context
+    tenant_id, session, station = context
     result = await session.execute(
-        select(Operador).where(Operador.tenant_id == tenant_id, Operador.status == "ATIVO")
+        select(Operador).join(EstacaoOperador, EstacaoOperador.operador_id == Operador.id).where(
+            Operador.tenant_id == tenant_id, Operador.status == "ATIVO",
+            EstacaoOperador.estacao_id == station.id, EstacaoOperador.status == "ATIVO"
+        )
     )
     return list(result.scalars())
+
+
+@router.get("/stations/provisioning", response_model=StationProvisioningOut)
+async def get_station_provisioning(context=Depends(require_station)):
+    tenant_id, session, station = context
+    result = await session.execute(
+        select(Operador).join(EstacaoOperador, EstacaoOperador.operador_id == Operador.id).where(
+            Operador.tenant_id == tenant_id, Operador.status == "ATIVO",
+            EstacaoOperador.estacao_id == station.id, EstacaoOperador.status == "ATIVO"
+        ).order_by(Operador.nome_exibicao)
+    )
+    return StationProvisioningOut(
+        station_id=station.id, station_external_id=station.external_id,
+        provisioning_version=station.recovery_secret_version,
+        recovery_secret_hash=station.recovery_secret_hash,
+        recovery_secret_version=station.recovery_secret_version,
+        operators=[ProvisionedOperatorOut.model_validate(item) for item in result.scalars()],
+    )
 
 
 @router.post("/stations/operators/login")
@@ -456,7 +564,11 @@ async def post_sync(data: SyncPushIn, context=Depends(require_station)):
                 tenant_id,
                 WeighingIn(
                     estacao_id=station.id,
-                    ordem_id=payload["ordem_id"],
+                    ordem_id=payload.get("ordem_id"),
+                    client_system=payload.get("client_system"),
+                    client_tenant_id=payload.get("client_tenant_id"),
+                    subject_type=payload.get("subject_type"),
+                    tipo_pesagem=payload.get("tipo_pesagem"),
                     local_id=item.local_id,
                     etapa=payload.get("etapa", "UNICA"),
                     peso_aferido_kg=payload["peso_aferido_kg"],

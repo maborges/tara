@@ -21,6 +21,21 @@ Balança, por meio do adaptador localizado em
 Documentação técnica para aplicações cliente:
 [docs/INTEGRACAO_CLIENTE_TECNICA.md](docs/INTEGRACAO_CLIENTE_TECNICA.md).
 
+Guia operacional para implantação do cliente usando API, Webhook ou o modelo
+híbrido:
+[docs/IMPLANTACAO_CLIENTE.md](docs/IMPLANTACAO_CLIENTE.md).
+
+### Navegação nas aplicações
+
+O Backoffice e a PWA da Estação possuem fluxos próprios de aplicação. O
+Backoffice concentra as áreas administrativas em uma única tela, alternando o
+conteúdo internamente; por isso, o cabeçalho não exibe um botão de retorno para
+uma rota inexistente. Na Estação, a tela de pesagem ativa é o destino principal
+durante a operação e a rota inicial redireciona para ela quando há uma sessão
+ativa. Assim, o cabeçalho operacional também não exibe um botão de retorno que
+não teria outro destino interno. O encerramento da operação deve ser feito
+pelas ações próprias da tela, como trocar o operador ou finalizar a sessão.
+
 ## Comandos por módulo
 
 O Backoffice Global e o Portal do Cliente são aplicações distintas. O
@@ -52,6 +67,8 @@ psql -h 192.168.0.3 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/015_w
 psql -h 192.168.0.3 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/016_platform_dashboard_rls.sql
 psql -h 192.168.0.3 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/017_pesagem_station.sql
 psql -h 192.168.0.3 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/018_table_comments.sql
+psql -h 192.168.0.3 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/023_credential_lookup_without_tenant.sql
+psql -h 192.168.0.3 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/024_remove_duplicate_api_client_secret_hash.sql
 ```
 
 Configure `service/.env`, principalmente `TARA_DATABASE_URL`,
@@ -273,6 +290,8 @@ psql -h 192.168.0.3 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/015_w
 psql -h 192.168.0.3 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/016_platform_dashboard_rls.sql
 psql -h 192.168.0.3 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/017_pesagem_station.sql
 psql -h 192.168.0.3 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/018_table_comments.sql
+psql -h 192.168.0.3 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/023_credential_lookup_without_tenant.sql
+psql -h 192.168.0.3 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/024_remove_duplicate_api_client_secret_hash.sql
 ```
 
 Inicie a API:
@@ -377,7 +396,7 @@ cd /opt/lampp/htdocs/tara/bridge
 python3 -m venv .venv
 ./.venv/bin/pip install -r requirements.txt
 cp config.yaml.example config.yaml
-./.venv/bin/python -m TARA_bridge.main
+./.venv/bin/python -m balanca_bridge.main
 ```
 
 ## Contrato com consumidores

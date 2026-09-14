@@ -22,9 +22,6 @@ from app.service import bootstrap_admin, create_api_client
 @pytest.mark.asyncio
 async def test_standalone_service_order_station_weighing_observer_flow():
     tenant_id = str(uuid.uuid4())
-    headers = {
-        "X-Tenant-ID": tenant_id,
-    }
     login = f"admin-{uuid.uuid4().hex[:8]}"
     password = "Senha-E2E-123"
     async with async_sessionmaker(_engine, expire_on_commit=False)() as session:
@@ -34,7 +31,7 @@ async def test_standalone_service_order_station_weighing_observer_flow():
             session,
             uuid.UUID(tenant_id),
             "AgroSaaS E2E",
-            ["clients:write", "orders:write", "events:read", "weighings:read", "stations:activate"],
+            ["clients:write", "orders:write", "orders:read", "events:read", "weighings:read", "stations:activate"],
             None,
         )
         await session.commit()
@@ -55,7 +52,6 @@ async def test_standalone_service_order_station_weighing_observer_flow():
             "Authorization": f"Bearer {response.json()['access_token']}",
         }
         integration_headers = {
-            "X-Tenant-ID": tenant_id,
             "X-Balanca-Client-ID": client_id,
             "X-Balanca-Client-Secret": client_secret,
         }
@@ -102,7 +98,6 @@ async def test_standalone_service_order_station_weighing_observer_flow():
         assert response.status_code == 200, response.text
         station_id = response.json()["station_id"]
         station_headers = {
-            "X-Tenant-ID": tenant_id,
             "Authorization": f"Bearer {response.json()['station_token']}",
         }
 
@@ -113,6 +108,11 @@ async def test_standalone_service_order_station_weighing_observer_flow():
         )
         assert response.status_code == 201, response.text
         operator_id = response.json()["id"]
+        response = await client.put(
+            f"/v1/stations/{station_id}/operators/{operator_id}",
+            headers=admin_headers,
+        )
+        assert response.status_code == 200, response.text
         response = await client.get("/v1/stations/operators", headers=station_headers)
         assert response.status_code == 200, response.text
         assert response.json()[0]["id"] == operator_id
@@ -150,19 +150,22 @@ async def test_standalone_service_order_station_weighing_observer_flow():
         assert response.status_code == 200, response.text
         assert response.json()[0]["event_type"] == "balanca.pesagem.concluida.v1"
 
-        # A credencial não pode ser usada em outro tenant e não substitui o
-        # token humano do backoffice.
-        wrong_tenant_headers = {**integration_headers, "X-Tenant-ID": str(uuid.uuid4())}
+        # A credencial resolve o tenant sem depender de um header externo.
         response = await client.post(
-            "/v1/orders", headers=wrong_tenant_headers, json={
-                "client_system": "agrosaas", "client_tenant_id": "outro",
-                "external_reference": "nao-deve-entrar", "correlation_id": "isolamento",
+            "/v1/orders", headers=integration_headers, json={
+                "client_system": "agrosaas", "client_tenant_id": "fazenda-service-e2e",
+                "external_reference": f"sem-tenant-{uuid.uuid4()}", "correlation_id": f"sem-tenant-{uuid.uuid4()}",
                 "subject_type": "VEICULO", "tipo_pesagem": "UNICA", "contexto": {},
             },
         )
-        assert response.status_code == 401, response.text
+        assert response.status_code == 201, response.text
         response = await client.get("/v1/orders", headers=integration_headers)
-        assert response.status_code in (401, 403), response.text
+        assert response.status_code == 200, response.text
+        assert any(item["id"] == order_id for item in response.json()["items"])
+
+        response = await client.get("/v1/admin/orders", headers=admin_headers)
+        assert response.status_code == 200, response.text
+        assert any(item["id"] == order_id for item in response.json())
 
         response = await client.post(
             f"/v1/admin/api-clients/{client_id}/rotate", headers=admin_headers

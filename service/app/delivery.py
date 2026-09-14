@@ -7,6 +7,7 @@ import hmac
 from urllib.parse import urlparse
 from datetime import datetime, timedelta
 from pathlib import Path
+import uuid
 
 import httpx
 from sqlalchemy import select
@@ -15,6 +16,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from .config import get_settings
 from .models import Outbox, WebhookDestination
 from .platform_identity import decrypt_platform_secret
+
+
+class PermanentDeliveryError(RuntimeError):
+    """Rejeição contratual do consumidor que não deve ser repetida."""
 
 
 def canonical_json(value: dict) -> bytes:
@@ -43,7 +48,7 @@ class OutboxDelivery:
 
     async def deliver(self, event: Outbox) -> None:
         """Deliver an event using the file or account-specific HTTP adapter."""
-        if self.settings.outbox_file_path:
+        if self.settings.outbox_file_path and self.session is None:
             await self._deliver_file(event)
             return
         await self._deliver_http(event)
@@ -51,12 +56,13 @@ class OutboxDelivery:
     async def is_event_enabled(self, event: Outbox) -> bool:
         if self.session is None:
             return True
-        configured = (await self.session.execute(select(WebhookDestination.event_types).where(
+        destination = (await self.session.execute(select(WebhookDestination).where(
             WebhookDestination.conta_id == event.conta_id,
             WebhookDestination.tenant_id == event.tenant_id,
-            WebhookDestination.status == "ATIVO",
         ))).scalar_one_or_none()
-        return configured is None or event.event_type in (configured or [])
+        if destination is None:
+            return True
+        return destination.status == "ATIVO" and event.event_type in (destination.event_types or [])
 
     async def _deliver_file(self, event: Outbox) -> None:
         path = Path(self.settings.outbox_file_path)
@@ -79,6 +85,9 @@ class OutboxDelivery:
                     self.retry_policy = (configured.max_attempts, configured.retry_base_seconds)
         destination = destination or self.settings.outbox_destination(str(event.conta_id))
         if not destination:
+            if self.settings.outbox_file_path:
+                await self._deliver_file(event)
+                return
             raise RuntimeError(
                 "Configure o destino HMAC da Conta em TARA_OUTBOX_ACCOUNT_DESTINATIONS_JSON "
                 "ou a configuração legada TARA_OUTBOX_TARGET_URL/TARA_OUTBOX_TARGET_API_KEY"
@@ -88,9 +97,37 @@ class OutboxDelivery:
         timestamp = str(int(datetime.utcnow().timestamp()))
         path = urlparse(target_url).path or "/"
         headers = signed_headers(event, body, hmac_secret, timestamp, path)
+        await self._post_http(target_url, body, headers)
+
+    async def deliver_test(self, account_id, target_url: str, hmac_secret: str) -> int:
+        """Send a signed synthetic event to validate a customer's webhook."""
+        event_id = uuid.uuid4()
+        timestamp = str(int(datetime.utcnow().timestamp()))
+        body = canonical_json({
+            "event_id": str(event_id), "event_type": "tara.webhook.test.v1",
+            "event_version": "v1", "account_id": str(account_id),
+            "occurred_at": datetime.utcnow().isoformat(),
+            "payload": {"message": "Webhook TARA configurado com sucesso"},
+        })
+        headers = signed_headers(_TestEvent(event_id, account_id), body, hmac_secret, timestamp, urlparse(target_url).path or "/")
+        return await self._post_http(target_url, body, headers)
+
+    async def _post_http(self, target_url: str, body: bytes, headers: dict[str, str]) -> int:
         async with httpx.AsyncClient(timeout=15) as client:
             response = await client.post(target_url, content=body, headers=headers)
-            response.raise_for_status()
+            if 200 <= response.status_code < 300 or response.status_code == 409:
+                return response.status_code
+            if 400 <= response.status_code < 500:
+                raise PermanentDeliveryError(
+                    f"Consumidor rejeitou a entrega (HTTP {response.status_code})"
+                )
+            raise RuntimeError(f"Consumidor indisponível (HTTP {response.status_code})")
+
+
+class _TestEvent:
+    def __init__(self, event_id, account_id) -> None:
+        self.id = event_id
+        self.conta_id = account_id
 
 
 async def deliver(event: Outbox) -> None:
@@ -130,8 +167,8 @@ async def process_pending_events(
         except Exception as exc:
             event.attempts += 1
             max_attempts, base_seconds = getattr(adapter, "retry_policy", (8, 2))
-            event.status = "FALHA" if event.attempts >= max_attempts else "PENDENTE"
-            event.last_error = str(exc)[:2000]
+            event.status = "FALHA" if isinstance(exc, PermanentDeliveryError) or event.attempts >= max_attempts else "PENDENTE"
+            event.last_error = str(exc)[:240]
             event.next_attempt_at = None if event.status == "FALHA" else datetime.utcnow() + timedelta(seconds=min(3600, base_seconds ** event.attempts))
         event.updated_at = datetime.utcnow()
     await session.commit()

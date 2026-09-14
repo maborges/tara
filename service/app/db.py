@@ -21,6 +21,25 @@ async def set_tenant_context(session: AsyncSession, tenant_id: str) -> None:
     )
 
 
+async def set_auth_lookup_context(session: AsyncSession, setting: str, value: str) -> None:
+    """Restrict the RLS credential lookup to the presented identifier."""
+    if setting not in {"app.auth_client_id", "app.auth_station_token_hash"}:
+        raise ValueError("Contexto de autenticação inválido")
+    await session.execute(
+        text("select set_config(:setting, :value, true)"),
+        {"setting": setting, "value": value},
+    )
+
+
+async def clear_auth_lookup_context(session: AsyncSession, setting: str) -> None:
+    if setting not in {"app.auth_client_id", "app.auth_station_token_hash"}:
+        raise ValueError("Contexto de autenticação inválido")
+    await session.execute(
+        text("select set_config(:setting, '', true)"),
+        {"setting": setting},
+    )
+
+
 async def set_platform_admin_context(session: AsyncSession, admin_user_id: str) -> None:
     """Marca a identidade global autenticada para as políticas RLS da plataforma."""
     await session.execute(

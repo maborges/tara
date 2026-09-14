@@ -5,12 +5,27 @@ import uuid
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import func, select
 
-from ..schemas import AccountDashboardOut, PlatformAccountOut, PlatformAccountUpdateIn, PlatformDashboardOut, PlatformEmailSettingsIn, PlatformEmailSettingsOut, PlatformEmailTestIn
+from ..schemas import AccountDashboardOut, PlatformAccountOut, PlatformAccountUpdateIn, PlatformDashboardOut, PlatformEmailSettingsIn, PlatformEmailSettingsOut, PlatformEmailTestIn, PlatformSecuritySettingsIn, PlatformSecuritySettingsOut
 from ..security import require_platform_admin
-from ..platform_identity import encrypt_platform_secret, load_email_settings, send_portal_email
+from ..platform_identity import encrypt_platform_secret, load_email_settings, load_security_settings, send_portal_email
 from ..models import ApiClient, Cliente, Conta, Estacao, Operador, Ordem, Outbox, Pesagem, PlatformSetting, PortalUser
 
 router = APIRouter(prefix="/v1/platform", tags=["Administração da Plataforma"])
+
+
+@router.get("/security", response_model=PlatformSecuritySettingsOut)
+async def get_security_settings(context=Depends(require_platform_admin)):
+    session, _admin = context
+    return await load_security_settings(session)
+
+
+@router.put("/security", response_model=PlatformSecuritySettingsOut)
+async def put_security_settings(data: PlatformSecuritySettingsIn, context=Depends(require_platform_admin)):
+    session, admin = context
+    for key, value in data.model_dump().items():
+        await _upsert_setting(session, f"security.{key}", value, False, admin.usuario_id)
+    await session.commit()
+    return await load_security_settings(session)
 
 
 @router.get("/dashboard", response_model=PlatformDashboardOut)

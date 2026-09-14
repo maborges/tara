@@ -6,26 +6,90 @@ from sqlalchemy import func, select
 
 from ..config import get_settings
 from ..db import get_session
-from ..models import ApiClient, Cliente, Conta, Estacao, Operador, Ordem, Outbox, Pesagem, PortalUser
+from ..models import ApiClient, Cliente, Conta, Estacao, EstacaoOperador, Operador, Ordem, Outbox, Pesagem, PortalUser
 from ..schemas import (
-    ApiClientCredentialOut, ApiClientIn, ApiClientListOut, ApiClientStatusOut,
+    ApiClientConfigurationOut, ApiClientCredentialOut, ApiClientIn, ApiClientListOut, ApiClientStatusOut, ApiClientSystemOut,
     LoginIn, PortalActionOut, PortalEmailTokenIn, PortalForgotPasswordIn,
     PortalLoginOut, PortalMeOut, PortalResetTokenOut,
-    PortalPasswordResetIn, PortalRegisterIn, PortalRegisterOut, PortalAccountUpdateIn, AccountDashboardOut,
-    WebhookDestinationIn, WebhookDestinationOut, OrderOut, WeighingOut, PortalUserOut, PortalUserUpdateIn,
+    PortalPasswordResetIn, PortalRegisterIn, PortalRegisterOut, PortalAccountUpdateIn, AccountDashboardOut, PlatformSecuritySettingsOut,
+    WebhookDestinationIn, WebhookDestinationOut, WebhookStatusIn, WebhookTestOut, OrderOut, WeighingOut, PortalUserOut, PortalUserUpdateIn, PortalOperatorIn, OperatorOut, StationOut, StationRecoveryOut,
 )
-from ..security import require_portal_admin, require_portal
+from ..security import issue_portal_token, require_portal_admin, require_portal
 from ..platform_identity import (
     confirm_portal_email, login_portal_user,
     register_portal_user, request_portal_password_reset, reset_portal_password,
     send_api_key_rotation_instructions,
-    update_portal_account,
+    update_portal_account, load_security_settings,
     verify_portal_password_reset_token,
 )
 from ..platform_identity import create_api_client, encrypt_platform_secret, revoke_api_client, rotate_api_client
+from ..operation import create_operator
+from ..auth import new_token, station_token_hash
 from ..models import WebhookDestination
+from ..delivery import OutboxDelivery
+from ..platform_identity import decrypt_platform_secret
 
 router = APIRouter(prefix="/v1/portal", tags=["Portal do Cliente"])
+
+
+@router.get("/operators", response_model=list[OperatorOut])
+async def get_portal_operators(context=Depends(require_portal_admin())):
+    tenant_id, session, _user = context
+    result = await session.execute(select(Operador).where(Operador.tenant_id == tenant_id).order_by(Operador.nome_exibicao))
+    return list(result.scalars())
+
+
+@router.post("/operators", response_model=OperatorOut, status_code=201)
+async def post_portal_operator(data: PortalOperatorIn, context=Depends(require_portal_admin())):
+    tenant_id, session, _user = context
+    try:
+        operator = await create_operator(session, tenant_id, type("Operator", (), {
+            "codigo": data.codigo, "identificador_externo": data.identificador_externo,
+            "nome_exibicao": data.nome_exibicao, "pessoa_ref": data.pessoa_ref,
+            "pin": data.senha_inicial, "pin_hash": None,
+        })())
+    except ValueError as exc:
+        await session.rollback()
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    await session.commit()
+    return operator
+
+
+@router.get("/stations", response_model=list[StationOut])
+async def get_portal_stations(context=Depends(require_portal_admin())):
+    tenant_id, session, _user = context
+    result = await session.execute(select(Estacao).where(Estacao.tenant_id == tenant_id).order_by(Estacao.nome))
+    return list(result.scalars())
+
+
+@router.put("/stations/{station_id}/operators/{operator_id}")
+async def put_portal_station_operator(station_id: uuid.UUID, operator_id: uuid.UUID, context=Depends(require_portal_admin())):
+    tenant_id, session, _user = context
+    station = (await session.execute(select(Estacao).where(Estacao.id == station_id, Estacao.tenant_id == tenant_id))).scalar_one_or_none()
+    operator = (await session.execute(select(Operador).where(Operador.id == operator_id, Operador.tenant_id == tenant_id))).scalar_one_or_none()
+    if station is None or operator is None:
+        raise HTTPException(status_code=404, detail="Estação ou operador não encontrado")
+    link = (await session.execute(select(EstacaoOperador).where(EstacaoOperador.estacao_id == station_id, EstacaoOperador.operador_id == operator_id))).scalar_one_or_none()
+    if link is None:
+        link = EstacaoOperador(estacao_id=station_id, operador_id=operator_id, tenant_id=tenant_id, status="ATIVO", created_at=datetime.utcnow())
+        session.add(link)
+    else:
+        link.status = "ATIVO"
+    await session.commit()
+    return {"station_id": station_id, "operator_id": operator_id, "status": link.status}
+
+
+@router.post("/stations/{station_id}/recovery-credential/rotate", response_model=StationRecoveryOut)
+async def rotate_portal_station_recovery(station_id: uuid.UUID, context=Depends(require_portal_admin())):
+    tenant_id, session, _user = context
+    station = (await session.execute(select(Estacao).where(Estacao.id == station_id, Estacao.tenant_id == tenant_id))).scalar_one_or_none()
+    if station is None:
+        raise HTTPException(status_code=404, detail="Estação não encontrada")
+    secret = new_token()
+    station.recovery_secret_hash = station_token_hash(secret)
+    station.recovery_secret_version = (station.recovery_secret_version or 0) + 1
+    await session.commit()
+    return StationRecoveryOut(station_id=station.id, recovery_secret=secret, recovery_secret_version=station.recovery_secret_version)
 
 
 @router.get("/orders", response_model=list[OrderOut])
@@ -106,7 +170,18 @@ async def post_login(data: LoginIn, session=Depends(get_session)):
         await session.rollback()
         raise HTTPException(status_code=401, detail=str(exc)) from exc
     await session.commit()
-    return _portal_login_response(user, account, token)
+    security = await load_security_settings(session)
+    return _portal_login_response(user, account, token, security["session_minutes"])
+
+
+@router.post("/auth/refresh", response_model=PortalLoginOut)
+async def post_refresh(context=Depends(require_portal)):
+    _tenant_id, session, user = context
+    account = (await session.execute(select(Conta).where(Conta.id == user.conta_id))).scalar_one()
+    security = await load_security_settings(session)
+    if not security["refresh_enabled"]:
+        raise HTTPException(status_code=403, detail="Renovação automática de sessão desativada")
+    return _portal_login_response(user, account, issue_portal_token(user, security["session_minutes"]))
 
 
 @router.get("/me", response_model=PortalMeOut)
@@ -114,7 +189,7 @@ async def get_me(context=Depends(require_portal)):
     _tenant_id, session, user = context
     account = (await session.execute(select(Conta).where(Conta.id == user.conta_id))).scalar_one()
     return PortalMeOut(
-        user_id=user.id, account_id=user.conta_id, tenant_id=user.tenant_id,
+        user_id=user.id, account_id=user.conta_id,
         nome_conta=account.nome, nome_exibicao=user.nome_exibicao,
         email=user.email, role=user.role,
     )
@@ -146,6 +221,12 @@ async def get_portal_dashboard(context=Depends(require_portal)):
     )
 
 
+@router.get("/session-policy", response_model=PlatformSecuritySettingsOut)
+async def get_portal_session_policy(context=Depends(require_portal)):
+    _tenant_id, session, _user = context
+    return await load_security_settings(session)
+
+
 @router.put("/me", response_model=PortalMeOut)
 async def put_me(data: PortalAccountUpdateIn, context=Depends(require_portal_admin())):
     tenant_id, session, user = context
@@ -155,7 +236,7 @@ async def put_me(data: PortalAccountUpdateIn, context=Depends(require_portal_adm
         await session.rollback()
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     await session.commit()
-    return PortalMeOut(user_id=user.id, account_id=account.id, tenant_id=tenant_id, nome_conta=account.nome, nome_exibicao=user.nome_exibicao, email=user.email, role=user.role)
+    return PortalMeOut(user_id=user.id, account_id=account.id, nome_conta=account.nome, nome_exibicao=user.nome_exibicao, email=user.email, role=user.role)
 
 
 @router.get("/webhook", response_model=WebhookDestinationOut)
@@ -197,9 +278,49 @@ async def put_webhook_destination(data: WebhookDestinationIn, context=Depends(re
         destination = WebhookDestination(id=uuid.uuid4(), tenant_id=tenant_id, conta_id=user.conta_id, target_url=str(data.target_url), hmac_secret_encrypted=encrypt_platform_secret(data.hmac_secret), status="ATIVO", event_types=data.event_types, max_attempts=data.max_attempts, retry_base_seconds=data.retry_base_seconds, created_at=datetime.utcnow(), updated_at=datetime.utcnow())
         session.add(destination)
     else:
-        destination.target_url, destination.event_types, destination.max_attempts, destination.retry_base_seconds, destination.updated_at = str(data.target_url), data.event_types, data.max_attempts, data.retry_base_seconds, datetime.utcnow()
+        destination.target_url, destination.event_types, destination.max_attempts, destination.retry_base_seconds, destination.status, destination.updated_at = str(data.target_url), data.event_types, data.max_attempts, data.retry_base_seconds, "ATIVO", datetime.utcnow()
         if data.hmac_secret:
             destination.hmac_secret_encrypted = encrypt_platform_secret(data.hmac_secret)
+    await session.commit()
+    return WebhookDestinationOut(target_url=destination.target_url, status=destination.status, event_types=destination.event_types, updated_at=destination.updated_at, max_attempts=destination.max_attempts, retry_base_seconds=destination.retry_base_seconds)
+
+
+@router.post("/webhook/test", response_model=WebhookTestOut)
+async def post_webhook_test(context=Depends(require_portal_admin())):
+    _tenant_id, session, user = context
+    destination = (await session.execute(select(WebhookDestination).where(WebhookDestination.conta_id == user.conta_id))).scalar_one_or_none()
+    if destination is None or destination.status != "ATIVO":
+        raise HTTPException(status_code=404, detail="Configure um webhook ativo antes de testar")
+    secret = decrypt_platform_secret(destination.hmac_secret_encrypted)
+    if not secret:
+        raise HTTPException(status_code=422, detail="O segredo HMAC do webhook não está disponível")
+    try:
+        status_code = await OutboxDelivery().deliver_test(user.conta_id, destination.target_url, secret)
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Falha ao entregar evento de teste: {str(exc)[:240]}") from exc
+    return WebhookTestOut(accepted=True, status_code=status_code, message="Evento de teste aceito pelo endpoint")
+
+
+@router.delete("/webhook", response_model=PortalActionOut)
+async def delete_webhook_destination(context=Depends(require_portal_admin())):
+    _tenant_id, session, user = context
+    destination = (await session.execute(select(WebhookDestination).where(WebhookDestination.conta_id == user.conta_id))).scalar_one_or_none()
+    if destination is None:
+        raise HTTPException(status_code=404, detail="Webhook ainda não configurado")
+    destination.status = "INATIVO"
+    destination.updated_at = datetime.utcnow()
+    await session.commit()
+    return PortalActionOut(message="Webhook desativado. A sincronização pela API continua disponível.")
+
+
+@router.patch("/webhook/status", response_model=WebhookDestinationOut)
+async def patch_webhook_status(data: WebhookStatusIn, context=Depends(require_portal_admin())):
+    _tenant_id, session, user = context
+    destination = (await session.execute(select(WebhookDestination).where(WebhookDestination.conta_id == user.conta_id))).scalar_one_or_none()
+    if destination is None:
+        raise HTTPException(status_code=404, detail="Configure o Webhook antes de alternar o modo")
+    destination.status = "ATIVO" if data.enabled else "INATIVO"
+    destination.updated_at = datetime.utcnow()
     await session.commit()
     return WebhookDestinationOut(target_url=destination.target_url, status=destination.status, event_types=destination.event_types, updated_at=destination.updated_at, max_attempts=destination.max_attempts, retry_base_seconds=destination.retry_base_seconds)
 
@@ -212,6 +333,25 @@ async def get_api_clients(context=Depends(require_portal_admin())):
         .order_by(ApiClient.created_at.desc())
     )
     return [ApiClientListOut.model_validate(client) for client in result.scalars()]
+
+
+@router.get("/api-clients/{client_id}/configuration", response_model=ApiClientConfigurationOut)
+async def get_api_client_configuration(client_id: str, context=Depends(require_portal_admin())):
+    tenant_id, session, user = context
+    client = (await session.execute(
+        select(ApiClient).where(ApiClient.client_id == client_id, ApiClient.tenant_id == tenant_id)
+    )).scalar_one_or_none()
+    if client is None:
+        raise HTTPException(status_code=404, detail="API Key não encontrada")
+
+    systems = (await session.execute(
+        select(Cliente).where(Cliente.conta_id == user.conta_id).order_by(Cliente.sistema_cliente, Cliente.tenant_cliente_id)
+    )).scalars()
+    return ApiClientConfigurationOut(
+        client_id=client.client_id,
+        account_id=user.conta_id,
+        sistemas_clientes=[ApiClientSystemOut.model_validate(item) for item in systems],
+    )
 
 
 @router.post("/api-clients", response_model=ApiClientCredentialOut, status_code=201)
@@ -274,10 +414,10 @@ async def post_send_recovery_email(client_id: str, context=Depends(require_porta
     return PortalActionOut(message=f"Instruções enviadas para {email}.")
 
 
-def _portal_login_response(user, account, token: str) -> PortalLoginOut:
+def _portal_login_response(user, account, token: str, session_minutes: int | None = None) -> PortalLoginOut:
     return PortalLoginOut(
-        access_token=token, expires_in=get_settings().jwt_access_minutes * 60,
-        user_id=user.id, account_id=account.id, tenant_id=user.tenant_id,
+        access_token=token, expires_in=(session_minutes or get_settings().jwt_access_minutes) * 60,
+        user_id=user.id, account_id=account.id,
         nome_conta=account.nome, nome_exibicao=user.nome_exibicao,
         email=user.email, role=user.role,
     )

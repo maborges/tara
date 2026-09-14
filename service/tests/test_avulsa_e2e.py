@@ -31,7 +31,6 @@ async def test_avulsa_sync_query_and_reconciliation_flow():
 
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://balanca.test") as api:
         credentials = {
-            "X-Tenant-ID": str(tenant_id),
             "X-Balanca-Client-ID": client.client_id,
             "X-Balanca-Client-Secret": secret,
         }
@@ -52,7 +51,6 @@ async def test_avulsa_sync_query_and_reconciliation_flow():
         )
         assert activation.status_code == 200, activation.text
         station_headers = {
-            "X-Tenant-ID": str(tenant_id),
             "Authorization": f"Bearer {activation.json()['station_token']}",
         }
 

@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useLiveQuery } from "dexie-react-hooks";
 import bcrypt from "bcryptjs";
 import { getSession, setSession } from "@/lib/db";
-import { ativarDispositivo, ApiError } from "@/lib/api";
+import { ativarDispositivo, ApiError, hashLocalCredential } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -63,6 +63,8 @@ export default function HomePage() {
         last_sync_at: null,
         bridge_url: null,
         bridge_token: null,
+        recovery_secret_hash: resp.recovery_secret ? await hashLocalCredential(resp.recovery_secret) : null,
+        recovery_secret_version: resp.recovery_secret ? 1 : 0,
       });
       router.replace("/pesagem");
     } catch (err) {

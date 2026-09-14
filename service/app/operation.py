@@ -48,6 +48,21 @@ async def create_order(session: AsyncSession, tenant_id: uuid.UUID, data) -> Ord
         "tenant_cliente_id": data.client_tenant_id,
         "nome_exibicao": data.client_system,
     })())
+    existing = (await session.execute(select(Ordem).where(
+        Ordem.cliente_id == client.id,
+        Ordem.referencia_externa == data.external_reference,
+    ))).scalar_one_or_none()
+    if existing:
+        same_request = (
+            existing.tenant_cliente_id == data.client_tenant_id
+            and existing.correlation_id == data.correlation_id
+            and existing.subject_type == data.subject_type
+            and existing.tipo_pesagem == data.tipo_pesagem
+            and existing.contexto == data.contexto
+        )
+        if same_request:
+            return existing
+        raise ValueError("CONFLICT: referência externa já existe com dados incompatíveis")
     order = Ordem(
         id=uuid.uuid4(), tenant_id=tenant_id, cliente_id=client.id,
         sistema_cliente=data.client_system, tenant_cliente_id=data.client_tenant_id,
@@ -74,17 +89,20 @@ async def create_station(session: AsyncSession, tenant_id: uuid.UUID, data) -> E
     return station
 
 
-async def activate_station(session: AsyncSession, tenant_id: uuid.UUID, data) -> tuple[Estacao, str]:
+async def activate_station(session: AsyncSession, tenant_id: uuid.UUID, data) -> tuple[Estacao, str, str]:
     station = (await session.execute(select(Estacao).where(
         Estacao.tenant_id == tenant_id, Estacao.activation_code == data.activation_code,
     ))).scalar_one_or_none()
     if station is None:
         raise ValueError("Código de ativação inválido")
     token = new_token()
+    recovery_secret = new_token()
     station.token_hash = station_token_hash(token)
+    station.recovery_secret_hash = hashlib.sha256(recovery_secret.encode()).hexdigest()
+    station.recovery_secret_version = (station.recovery_secret_version or 0) + 1
     station.activation_code = None
     station.status = "ATIVA"
-    return station, token
+    return station, token, recovery_secret
 
 
 async def create_operator(session: AsyncSession, tenant_id: uuid.UUID, data) -> Operador:
@@ -93,9 +111,16 @@ async def create_operator(session: AsyncSession, tenant_id: uuid.UUID, data) -> 
     ))).scalar_one_or_none()
     if existing:
         raise ValueError("Código de operador já cadastrado")
+    if getattr(data, "identificador_externo", None):
+        existing_external = (await session.execute(select(Operador).where(
+            Operador.tenant_id == tenant_id,
+            Operador.identificador_externo == data.identificador_externo,
+        ))).scalar_one_or_none()
+        if existing_external:
+            raise ValueError("Identificador externo de operador já cadastrado")
     operator = Operador(
         id=uuid.uuid4(), tenant_id=tenant_id, codigo=data.codigo,
-        nome_exibicao=data.nome_exibicao, pessoa_ref=data.pessoa_ref,
+        nome_exibicao=data.nome_exibicao, identificador_externo=data.identificador_externo, pessoa_ref=data.pessoa_ref,
         pin_hash=(
             data.pin_hash
             or (hashlib.sha256(data.pin.encode()).hexdigest() if data.pin else None)
@@ -134,11 +159,13 @@ async def complete_weighing(session: AsyncSession, tenant_id: uuid.UUID, data) -
     )
     session.add(weight)
     account = await _get_account(session, tenant_id)
-    if order:
+    if order is not None:
         order.status = "CONCLUIDA"
         order.peso_liquido_kg = data.peso_aferido_kg - (data.peso_tara_kg or Decimal("0"))
         order.concluida_em = datetime.utcnow()
-    session.add(build_completed_weighing_outbox(weight, order, data, account.id))
+    session.add(build_completed_weighing_outbox(
+        weight, order, data, account.id
+    ))
     await session.flush()
     return weight
 
@@ -150,7 +177,8 @@ async def reconcile_weighing(session: AsyncSession, tenant_id: uuid.UUID, weighi
     ))).scalar_one_or_none()
     if weight is None:
         raise ValueError("Pesagem não encontrada para a Conta")
-    if weight.ordem_id is not None:
+    current_order = (await session.execute(select(Ordem).where(Ordem.id == weight.ordem_id))).scalar_one_or_none() if weight.ordem_id else None
+    if current_order is not None and current_order.status != "PENDENTE_RECONCILIACAO":
         raise ValueError("Pesagem já está vinculada a uma ordem")
     if data.status == "CRIAR_ORDEM":
         if data.ordem is None:

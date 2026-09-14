@@ -37,6 +37,12 @@ Comandos:
     psql --set=ON_ERROR_STOP=1 "$TARA_DATABASE_URL" -f migrations/016_platform_dashboard_rls.sql
     psql --set=ON_ERROR_STOP=1 "$TARA_DATABASE_URL" -f migrations/017_pesagem_station.sql
     psql --set=ON_ERROR_STOP=1 "$TARA_DATABASE_URL" -f migrations/018_table_comments.sql
+    psql --set=ON_ERROR_STOP=1 "$TARA_DATABASE_URL" -f migrations/023_credential_lookup_without_tenant.sql
+    psql --set=ON_ERROR_STOP=1 "$TARA_DATABASE_URL" -f migrations/024_remove_duplicate_api_client_secret_hash.sql
+    psql --set=ON_ERROR_STOP=1 "$TARA_DATABASE_URL" -f migrations/019_pesagem_immutability.sql
+    psql --set=ON_ERROR_STOP=1 "$TARA_DATABASE_URL" -f migrations/020_shadow_order_status.sql
+    psql --set=ON_ERROR_STOP=1 "$TARA_DATABASE_URL" -f migrations/021_client_logical_key.sql
+    psql --set=ON_ERROR_STOP=1 "$TARA_DATABASE_URL" -f migrations/022_station_operator_provisioning.sql
     ./start_server.sh
 
 Endpoints:
@@ -79,15 +85,17 @@ apenas para compatibilidade com clientes legados.
 Aplicações consumidoras não usam o login humano. O administrador cria uma
 credencial em POST /v1/admin/api-clients. O segredo é exibido uma única vez e
 deve ser armazenado pelo consumidor. As chamadas usam
-X-Balanca-Client-ID, X-Balanca-Client-Secret e escopos, sem compartilhar uma
-chave global. Os escopos disponíveis são clients:write, orders:write,
+X-Balanca-Client-ID e X-Balanca-Client-Secret; a Conta é resolvida pela
+credencial e os escopos controlam as operações, sem compartilhar uma chave global.
+Os escopos disponíveis são clients:write, orders:write,
 events:read e stations:activate. A credencial pode ser rotacionada em
 POST /v1/admin/api-clients/{client_id}/rotate e revogada em
 POST /v1/admin/api-clients/{client_id}/revoke; o segredo nunca é exibido na
 revogação.
 
 Chamadas administrativas usam Authorization: Bearer, X-Tenant-ID e a
-permissão correspondente. A estação usa Authorization: Bearer e X-Tenant-ID.
+permissão correspondente. A estação usa somente Authorization: Bearer; seu
+tenant é resolvido pelo token da estação.
 Os IDs de tenant do sistema
 consumidor permanecem textuais dentro do contrato.
 

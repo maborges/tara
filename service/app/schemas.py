@@ -3,7 +3,7 @@ from decimal import Decimal
 from typing import Any, Literal
 import uuid
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class ClientIn(BaseModel):
@@ -69,6 +69,13 @@ class WebhookDestinationIn(BaseModel):
     max_attempts: int = Field(default=8, ge=1, le=50)
     retry_base_seconds: int = Field(default=2, ge=1, le=3600)
 
+    @field_validator("target_url")
+    @classmethod
+    def require_https(cls, value: str) -> str:
+        if not value.lower().startswith("https://"):
+            raise ValueError("O destino do webhook deve usar HTTPS")
+        return value
+
 
 class WebhookDestinationOut(BaseModel):
     target_url: str
@@ -78,6 +85,16 @@ class WebhookDestinationOut(BaseModel):
     updated_at: datetime
     max_attempts: int
     retry_base_seconds: int
+
+
+class WebhookStatusIn(BaseModel):
+    enabled: bool
+
+
+class WebhookTestOut(BaseModel):
+    accepted: bool
+    status_code: int | None = None
+    message: str
 
 
 class LoginIn(BaseModel):
@@ -107,7 +124,6 @@ class PortalLoginOut(BaseModel):
     expires_in: int
     user_id: uuid.UUID
     account_id: uuid.UUID
-    tenant_id: uuid.UUID
     nome_conta: str
     nome_exibicao: str
     email: str
@@ -173,10 +189,20 @@ class PlatformEmailTestIn(BaseModel):
     recipient: str = Field(min_length=5, max_length=255)
 
 
+class PlatformSecuritySettingsIn(BaseModel):
+    session_minutes: int = Field(default=30, ge=5, le=480)
+    idle_minutes: int = Field(default=120, ge=15, le=1440)
+    refresh_enabled: bool = True
+    warning_minutes: int = Field(default=5, ge=1, le=60)
+
+
+class PlatformSecuritySettingsOut(PlatformSecuritySettingsIn):
+    pass
+
+
 class PortalMeOut(BaseModel):
     user_id: uuid.UUID
     account_id: uuid.UUID
-    tenant_id: uuid.UUID
     nome_conta: str
     nome_exibicao: str
     email: str
@@ -235,6 +261,19 @@ class ApiClientStatusOut(BaseModel):
 
 class ApiClientListOut(ApiClientStatusOut):
     """Credencial administrativa sem segredo reversível."""
+
+
+class ApiClientSystemOut(BaseModel):
+    sistema_cliente: str
+    tenant_cliente_id: str
+    nome_exibicao: str
+    status: str
+
+
+class ApiClientConfigurationOut(BaseModel):
+    client_id: str
+    account_id: uuid.UUID
+    sistemas_clientes: list[ApiClientSystemOut] = Field(default_factory=list)
 
 
 class ContingencyRecordIn(BaseModel):
@@ -306,6 +345,11 @@ class OrderOut(BaseModel):
     concluida_em: datetime | None
 
 
+class OrderPageOut(BaseModel):
+    items: list[OrderOut]
+    next_cursor: str | None = None
+
+
 class StationIn(BaseModel):
     external_id: str = Field(min_length=1, max_length=120)
     nome: str = Field(min_length=1, max_length=160)
@@ -331,12 +375,14 @@ class ActivationOut(BaseModel):
     station_id: uuid.UUID
     station_token: str
     expires_at: datetime | None = None
+    recovery_secret: str | None = None
 
 
 class OperatorIn(BaseModel):
     codigo: str = Field(min_length=1, max_length=40)
     nome_exibicao: str = Field(min_length=1, max_length=150)
     pessoa_ref: str | None = Field(default=None, max_length=120)
+    identificador_externo: str | None = Field(default=None, max_length=120)
     pin: str | None = Field(default=None, min_length=4, max_length=32)
     pin_hash: str | None = Field(default=None, max_length=255)
 
@@ -347,13 +393,51 @@ class OperatorOut(BaseModel):
     codigo: str
     nome_exibicao: str
     pessoa_ref: str | None
+    identificador_externo: str | None
     status: str
     created_at: datetime
+
+
+class PortalOperatorIn(BaseModel):
+    codigo: str = Field(min_length=1, max_length=40)
+    identificador_externo: str = Field(min_length=1, max_length=120)
+    nome_exibicao: str = Field(min_length=1, max_length=150)
+    pessoa_ref: str | None = Field(default=None, max_length=120)
+    senha_inicial: str = Field(min_length=4, max_length=128)
+
+
+class StationRecoveryOut(BaseModel):
+    station_id: uuid.UUID
+    recovery_secret: str
+    recovery_secret_version: int
+
+
+class ProvisionedOperatorOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: uuid.UUID
+    codigo: str
+    identificador_externo: str | None
+    nome_exibicao: str
+    pin_hash: str | None
+    status: str
+
+
+class StationProvisioningOut(BaseModel):
+    station_id: uuid.UUID
+    station_external_id: str
+    provisioning_version: int
+    recovery_secret_hash: str | None
+    recovery_secret_version: int
+    operators: list[ProvisionedOperatorOut]
 
 
 class WeighingIn(BaseModel):
     estacao_id: uuid.UUID | None = None
     ordem_id: uuid.UUID | None = None
+    client_system: str | None = Field(default=None, min_length=1, max_length=80)
+    client_tenant_id: str | None = Field(default=None, min_length=1, max_length=120)
+    subject_type: Literal["VEICULO", "ANIMAL"] | None = None
+    tipo_pesagem: str | None = Field(default=None, min_length=1, max_length=30)
     local_id: str = Field(min_length=1, max_length=120)
     etapa: str = Field(min_length=1, max_length=30)
     peso_aferido_kg: Decimal = Field(gt=Decimal("0"))

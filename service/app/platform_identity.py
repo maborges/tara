@@ -59,7 +59,8 @@ async def login_portal_user(session: AsyncSession, email: str, password: str):
     account = (await session.execute(select(Conta).where(Conta.id == user.conta_id, Conta.tenant_id == user.tenant_id))).scalar_one_or_none()
     if account is None or account.status != "ATIVA":
         raise ValueError("Conta do cliente inativa")
-    return user, account, issue_portal_token(user)
+    security = await load_security_settings(session)
+    return user, account, issue_portal_token(user, security["session_minutes"])
 
 
 async def create_portal_token(session, user, purpose: str) -> str:
@@ -122,6 +123,17 @@ async def load_email_settings(session) -> dict:
     values = {row.key: row.value for row in rows}
     port = int(values.get("email.smtp_port") or 587)
     return {"enabled": values.get("email.enabled") == "true", "smtp_host": values.get("email.smtp_host"), "smtp_port": port, "smtp_username": values.get("email.smtp_username"), "smtp_password": decrypt_platform_secret(values.get("email.smtp_password")), "smtp_from": values.get("email.smtp_from") or "no-reply@balanca.local", "smtp_starttls": values.get("email.smtp_starttls", "true") == "true", "smtp_ssl": values.get("email.smtp_ssl", "true" if port == 465 else "false") == "true"}
+
+
+async def load_security_settings(session) -> dict:
+    rows = (await session.execute(select(PlatformSetting))).scalars().all()
+    values = {row.key: row.value for row in rows}
+    return {
+        "session_minutes": int(values.get("security.session_minutes") or get_settings().jwt_access_minutes),
+        "idle_minutes": int(values.get("security.idle_minutes") or 120),
+        "refresh_enabled": values.get("security.refresh_enabled", "true") == "true",
+        "warning_minutes": int(values.get("security.warning_minutes") or 5),
+    }
 
 
 async def update_portal_account(session: AsyncSession, user, nome_conta: str, nome_exibicao: str):
@@ -188,7 +200,8 @@ async def login_backoffice(session: AsyncSession, tenant_id: uuid.UUID, login: s
         raise ValueError("Usuário ou senha inválidos")
     permissions = await _permissions_for_user(session, user.id, tenant_id)
     user.last_login_at = datetime.utcnow()
-    return user, permissions, issue_backoffice_token(user, permissions)
+    security = await load_security_settings(session)
+    return user, permissions, issue_backoffice_token(user, permissions, security["session_minutes"])
 
 
 async def login_backoffice_without_tenant(session: AsyncSession, login: str, password: str):
@@ -202,7 +215,8 @@ async def login_backoffice_without_tenant(session: AsyncSession, login: str, pas
     permissions = await _permissions_for_user(session, user.id, admin.tenant_id)
     now = datetime.utcnow()
     user.last_login_at, admin.last_login_at = now, now
-    return user, permissions, issue_backoffice_token(user, permissions)
+    security = await load_security_settings(session)
+    return user, permissions, issue_backoffice_token(user, permissions, security["session_minutes"])
 
 
 async def _permissions_for_user(session: AsyncSession, user_id: uuid.UUID, tenant_id: uuid.UUID) -> set[str]:
@@ -252,10 +266,11 @@ async def create_api_client(session: AsyncSession, tenant_id: uuid.UUID, nome: s
         raise ValueError(f"Escopos inválidos: {', '.join(invalid_scopes)}")
     client_id = f"bal_{secrets.token_urlsafe(18)}"
     secret = secrets.token_urlsafe(36)
-    client = ApiClient(id=uuid.uuid4(), tenant_id=tenant_id, client_id=client_id, nome=nome, secret_hash=hashlib.sha256(secret.encode()).hexdigest(), scopes=scopes, status="ATIVO", expires_at=expires_at, created_at=datetime.utcnow())
+    secret_hash = hashlib.sha256(secret.encode()).hexdigest()
+    client = ApiClient(id=uuid.uuid4(), tenant_id=tenant_id, client_id=client_id, nome=nome, scopes=scopes, status="ATIVO", expires_at=expires_at, created_at=datetime.utcnow())
     session.add(client)
     await session.flush()
-    session.add(ApiClientSecret(id=uuid.uuid4(), api_client_id=client.id, tenant_id=tenant_id, version=1, secret_hash=client.secret_hash, status="ATIVO", created_at=datetime.utcnow()))
+    session.add(ApiClientSecret(id=uuid.uuid4(), api_client_id=client.id, tenant_id=tenant_id, version=1, secret_hash=secret_hash, status="ATIVO", created_at=datetime.utcnow()))
     await session.flush()
     return client, secret
 

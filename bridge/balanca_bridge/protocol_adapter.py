@@ -3,7 +3,7 @@ from __future__ import annotations
 import re
 from decimal import Decimal, InvalidOperation
 
-from TARA_bridge.config import ProtocolConfig
+from balanca_bridge.config import ProtocolConfig
 
 
 class FrameParseError(ValueError):

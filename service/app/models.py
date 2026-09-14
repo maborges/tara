@@ -119,7 +119,6 @@ class ApiClient(Base):
     tenant_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
     client_id: Mapped[str] = mapped_column(String(120), nullable=False)
     nome: Mapped[str] = mapped_column(String(160), nullable=False)
-    secret_hash: Mapped[str] = mapped_column(String(64), nullable=False)
     scopes: Mapped[list] = mapped_column(JSONB, nullable=False)
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="ATIVO")
     expires_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
@@ -248,6 +247,7 @@ class Cliente(Base):
     __tablename__ = "clientes"
     __table_args__ = (
         UniqueConstraint("tenant_id", "sistema_cliente", "tenant_cliente_id", name="uq_TARA_clientes_external_tenant"),
+        UniqueConstraint("conta_id", "sistema_cliente", "tenant_cliente_id", name="uq_TARA_clientes_account_external"),
         {"schema": "tara", "comment": "Referências de clientes mantidas pela plataforma para correlacionar dados dos sistemas consumidores."},
     )
 
@@ -299,6 +299,8 @@ class Estacao(Base):
     token_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
     public_key: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     identity_fingerprint: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    recovery_secret_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    recovery_secret_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     status: Mapped[str] = mapped_column(String(20), nullable=False)
     last_seen_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
@@ -314,6 +316,7 @@ class Operador(Base):
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
     tenant_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
     codigo: Mapped[str] = mapped_column(String(40), nullable=False)
+    identificador_externo: Mapped[str | None] = mapped_column(String(120), nullable=True)
     nome_exibicao: Mapped[str] = mapped_column(String(150), nullable=False)
     pessoa_ref: Mapped[str | None] = mapped_column(String(120), nullable=True)
     pin_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
@@ -321,10 +324,23 @@ class Operador(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
 
 
+class EstacaoOperador(Base):
+    __tablename__ = "estacao_operadores"
+    __table_args__ = (
+        UniqueConstraint("estacao_id", "operador_id", name="uq_TARA_estacao_operador"),
+        {"schema": "tara", "comment": "Autorizações de operadores por estação para operação offline."},
+    )
+    estacao_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("tara.estacoes.id", ondelete="CASCADE"), primary_key=True)
+    operador_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("tara.operadores.id", ondelete="CASCADE"), primary_key=True)
+    tenant_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="ATIVO")
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+
+
 class Ordem(Base):
     __tablename__ = "ordens"
     __table_args__ = (
-        UniqueConstraint("tenant_id", "sistema_cliente", "referencia_externa", name="uq_TARA_ordens_external"),
+        UniqueConstraint("cliente_id", "referencia_externa", name="uq_TARA_ordens_client_external"),
         Index("ix_TARA_ordens_status", "tenant_id", "status"),
         {"schema": "tara", "comment": "Solicitações operacionais que orientam pesagens e correlacionam a operação com o sistema consumidor."},
     )
@@ -339,7 +355,7 @@ class Ordem(Base):
     subject_type: Mapped[str] = mapped_column(String(20), nullable=False)
     tipo_pesagem: Mapped[str] = mapped_column(String(30), nullable=False)
     contexto: Mapped[dict] = mapped_column(JSONB, nullable=False)
-    status: Mapped[str] = mapped_column(String(20), nullable=False)
+    status: Mapped[str] = mapped_column(String(40), nullable=False)
     peso_liquido_kg: Mapped[Decimal | None] = mapped_column(Numeric(12, 3), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
     concluida_em: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)

@@ -108,6 +108,17 @@ export interface SessionRow {
   // estação, não vem do backend. Ex.: "http://192.168.0.50:8321".
   bridge_url: string | null;
   bridge_token: string | null;
+  recovery_secret_hash: string | null;
+  recovery_secret_version: number;
+}
+
+export interface OperadorLocal {
+  id: string;
+  codigo: string;
+  identificador_externo: string | null;
+  nome_exibicao: string;
+  pin_hash: string | null;
+  status: "ATIVO" | "REVOGADO";
 }
 
 /** Operador logado na estação (PIN pessoal) — separado de SessionRow porque
@@ -135,6 +146,7 @@ class BalancaDB extends Dexie {
   session!: EntityTable<SessionRow, "id">;
   operador_sessao!: EntityTable<OperadorSessaoRow, "id">;
   animais!: EntityTable<AnimalLocal, "id">;
+  operadores!: EntityTable<OperadorLocal, "id">;
   contingency_state!: EntityTable<ContingencyStateRow, "id">;
 
   constructor() {
@@ -153,6 +165,9 @@ class BalancaDB extends Dexie {
     });
     this.version(4).stores({
       contingency_state: "id",
+    });
+    this.version(5).stores({
+      operadores: "id, status, identificador_externo",
     });
   }
 }
@@ -186,6 +201,10 @@ export async function setOperadorSessao(row: Omit<OperadorSessaoRow, "id">): Pro
 
 export async function clearOperadorSessao(): Promise<void> {
   await db.operador_sessao.delete(1);
+}
+
+export async function changeOperatorPassword(operatorId: string, passwordHash: string): Promise<void> {
+  await db.operadores.update(operatorId, { pin_hash: passwordHash, status: "ATIVO" });
 }
 
 /** Recupera filas interrompidas por fechamento/queda de energia da estação. */

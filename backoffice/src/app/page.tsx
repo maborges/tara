@@ -12,6 +12,7 @@ import { toast } from "sonner";
 import { DataTable, type ColumnDef } from "@/components/ui/data-table";
 import { PageHeader } from "@/components/shared/page-header";
 import { PlatformEmailSettingsPanel } from "@/components/platform-email-settings";
+import { PlatformSecuritySettingsPanel } from "@/components/platform-security-settings";
 import { Dialog, DialogBody, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useBackofficeSession, type BackofficeData } from "@/lib/use-backoffice-session";
 
@@ -235,7 +236,7 @@ function Metric({ label, value, icon }: { label: string; value: number; icon: Re
 
 function DataView({ view, data, session, loading, onRefresh, onError }: { view: View; data: BackofficeData; session: Session; loading: boolean; onRefresh: () => void; onError: (value: string | null) => void }) {
   if (view === "accounts") return <PlatformAccountsPanel session={session} />;
-  if (view === "settings") return <div className="space-y-6"><PageHeader title="Configurações da plataforma" description="Gerencie os serviços e parâmetros globais da Plataforma Balança." breadcrumbs={[{ label: "Administração" }]} icon={<Mail className="size-6" />} /><PlatformEmailSettingsPanel session={session} /></div>;
+  if (view === "settings") return <div className="space-y-6"><PageHeader title="Configurações da plataforma" description="Gerencie os serviços e parâmetros globais da Plataforma Balança." breadcrumbs={[{ label: "Administração" }]} icon={<Mail className="size-6" />} /><PlatformSecuritySettingsPanel session={session} /><PlatformEmailSettingsPanel session={session} /></div>;
   if (view === "weighings") return <WeighingPanel session={session} />;
   const subtitle = view === "clients" ? "Gerencie os sistemas consumidores e suas credenciais de integração." : "Consulte e administre os registros do tenant com isolamento e RBAC.";
 

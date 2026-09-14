@@ -40,6 +40,7 @@ function mapStandalonePath(path: string[]) {
     "balanca/sync/pull": "/v1/stations/sync/pull",
     "balanca/operadores/ativos": "/v1/stations/operators",
     "balanca/operadores/login": "/v1/stations/operators/login",
+    "balanca/provisioning": "/v1/stations/provisioning",
   };
   return mappings[joined] || `/api/v1/${joined}`;
 }
@@ -69,10 +70,6 @@ async function proxy(request: NextRequest, ctx: { params: Promise<{ path: string
     headers.set("X-Balanca-Client-ID", process.env.TARA_SERVICE_CLIENT_ID || "");
     headers.set("X-Balanca-Client-Secret", process.env.TARA_SERVICE_CLIENT_SECRET || "");
   }
-  if (standaloneService && !headers.get("X-Tenant-ID") && process.env.TARA_TENANT_ID) {
-    headers.set("X-Tenant-ID", process.env.TARA_TENANT_ID);
-  }
-
   try {
     const response = await fetch(targetUrl, {
       method,

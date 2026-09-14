@@ -1,4 +1,4 @@
-{"timestamp":"00:00:01.985","source":"Server","level":"LOG","message":"- Experiments (use with caution):"}
-{"timestamp":"00:00:01.985","source":"Server","level":"LOG","message":"  ⨯ useTypeScriptCli"}
-{"timestamp":"00:00:01.985","source":"Server","level":"LOG","message":""}
-{"timestamp":"00:00:14.314","source":"Server","level":"LOG","message":"○ Compiling / ..."}
+{"timestamp":"00:00:03.292","source":"Server","level":"LOG","message":"- Experiments (use with caution):"}
+{"timestamp":"00:00:03.292","source":"Server","level":"LOG","message":"  ⨯ useTypeScriptCli"}
+{"timestamp":"00:00:03.293","source":"Server","level":"LOG","message":""}
+{"timestamp":"00:00:06.351","source":"Server","level":"LOG","message":"○ Compiling / ..."}

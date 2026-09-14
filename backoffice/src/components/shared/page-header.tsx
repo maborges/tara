@@ -1,7 +1,6 @@
 import * as React from "react";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
-import { HeaderBackButton } from "./header-back-button";
 
 // ─── Breadcrumb ──────────────────────────────────────────────
 interface BreadcrumbItem {
@@ -50,7 +49,6 @@ export function PageHeader({
                 )}
               </React.Fragment>
             ))}
-            <HeaderBackButton />
           </nav>
         )}
         <h1 className="flex items-center gap-3 text-balance text-3xl font-light leading-tight text-foreground">

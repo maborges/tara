@@ -2,8 +2,8 @@ from decimal import Decimal
 
 import pytest
 
-from TARA_bridge.config import ProtocolConfig
-from TARA_bridge.protocol_adapter import ProtocolAdapter, FrameParseError
+from balanca_bridge.config import ProtocolConfig
+from balanca_bridge.protocol_adapter import ProtocolAdapter, FrameParseError
 
 
 def test_parse_frame_generico_virgula_decimal():

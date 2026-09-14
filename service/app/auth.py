@@ -6,7 +6,7 @@ from datetime import datetime
 from fastapi import Depends, Header, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from .db import get_session, set_tenant_context
+from .db import clear_auth_lookup_context, get_session, set_auth_lookup_context, set_tenant_context
 
 
 def station_token_hash(token: str) -> str:
@@ -15,7 +15,6 @@ def station_token_hash(token: str) -> str:
 
 async def require_station(
     authorization: str = Header(..., alias="Authorization"),
-    x_tenant_id: str = Header(..., alias="X-Tenant-ID"),
     session: AsyncSession = Depends(get_session),
 ) -> tuple[uuid.UUID, AsyncSession, object]:
     """Authenticate a physical station and preserve its identity for capture.
@@ -27,20 +26,18 @@ async def require_station(
     """
     if not authorization.startswith("Bearer "):
         raise HTTPException(status_code=401, detail="Bearer da estação ausente")
-    try:
-        tenant_id = uuid.UUID(x_tenant_id)
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail="X-Tenant-ID deve ser UUID") from exc
     token_hash = station_token_hash(authorization.split(" ", 1)[1])
-    await set_tenant_context(session, str(tenant_id))
+    await set_auth_lookup_context(session, "app.auth_station_token_hash", token_hash)
     from sqlalchemy import select
     from .models import Estacao
 
-    station = (await session.execute(select(Estacao).where(Estacao.tenant_id == tenant_id, Estacao.token_hash == token_hash, Estacao.status == "ATIVA"))).scalar_one_or_none()
+    station = (await session.execute(select(Estacao).where(Estacao.token_hash == token_hash, Estacao.status == "ATIVA"))).scalar_one_or_none()
+    await clear_auth_lookup_context(session, "app.auth_station_token_hash")
     if station is None:
         raise HTTPException(status_code=401, detail="Token da estação inválido")
+    await set_tenant_context(session, str(station.tenant_id))
     station.last_seen_at = datetime.utcnow()
-    return tenant_id, session, station
+    return station.tenant_id, session, station
 
 
 def new_token() -> str:

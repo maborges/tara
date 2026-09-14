@@ -13,7 +13,7 @@ from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .config import get_settings
-from .db import get_session, set_platform_admin_context, set_tenant_context
+from .db import clear_auth_lookup_context, get_session, set_auth_lookup_context, set_platform_admin_context, set_tenant_context
 from .models import AdministradorPlataforma, ApiClient, ApiClientSecret, Papel, PapelPermissao, Permissao, PortalUser, Usuario, UsuarioPapel
 
 
@@ -54,7 +54,7 @@ def verify_password(password: str, password_hash: str) -> bool:
         return False
 
 
-def issue_backoffice_token(user: Usuario, permissions: set[str]) -> str:
+def issue_backoffice_token(user: Usuario, permissions: set[str], access_minutes: int | None = None) -> str:
     settings = get_settings()
     now = datetime.now(timezone.utc)
     payload = {
@@ -63,13 +63,13 @@ def issue_backoffice_token(user: Usuario, permissions: set[str]) -> str:
         "type": "TARA_backoffice",
         "permissions": sorted(permissions),
         "iat": int(now.timestamp()),
-        "exp": int((now + timedelta(minutes=settings.jwt_access_minutes)).timestamp()),
+        "exp": int((now + timedelta(minutes=access_minutes or settings.jwt_access_minutes)).timestamp()),
         "jti": secrets.token_urlsafe(18),
     }
     return jwt.encode(payload, settings.jwt_secret_secret, algorithm=settings.jwt_algorithm)
 
 
-def issue_portal_token(user: PortalUser) -> str:
+def issue_portal_token(user: PortalUser, access_minutes: int | None = None) -> str:
     settings = get_settings()
     now = datetime.now(timezone.utc)
     payload = {
@@ -79,7 +79,7 @@ def issue_portal_token(user: PortalUser) -> str:
         "type": "TARA__PORTal",
         "role": user.role,
         "iat": int(now.timestamp()),
-        "exp": int((now + timedelta(minutes=settings.jwt_access_minutes)).timestamp()),
+        "exp": int((now + timedelta(minutes=access_minutes or settings.jwt_access_minutes)).timestamp()),
         "jti": secrets.token_urlsafe(18),
     }
     return jwt.encode(payload, settings.jwt_secret_secret, algorithm=settings.jwt_algorithm)
@@ -224,31 +224,29 @@ def require_backoffice(permission: str | None = None):
 
 
 async def require_client_context(
-    x_tenant_id: str = Header(..., alias="X-Tenant-ID"),
     x_client_id: str = Header(..., alias="X-Balanca-Client-ID"),
     x_client_secret: str = Header(..., alias="X-Balanca-Client-Secret"),
     session: AsyncSession = Depends(get_session),
 ) -> tuple[uuid.UUID, AsyncSession, ApiClient]:
-    try:
-        tenant_id = uuid.UUID(x_tenant_id)
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail="X-Tenant-ID inválido") from exc
-    await set_tenant_context(session, str(tenant_id))
+    await set_auth_lookup_context(session, "app.auth_client_id", x_client_id)
     client = (await session.execute(
         select(ApiClient).where(
             ApiClient.client_id == x_client_id,
-            ApiClient.tenant_id == tenant_id,
             ApiClient.status == "ATIVO",
         )
     )).scalar_one_or_none()
+    await clear_auth_lookup_context(session, "app.auth_client_id")
+    if client is None:
+        raise HTTPException(status_code=401, detail="Credencial da aplicação inválida")
+    await set_tenant_context(session, str(client.tenant_id))
     secret_hash = hashlib.sha256(x_client_secret.encode()).hexdigest()
-    secret = None if client is None else (await session.execute(select(ApiClientSecret).where(
+    secret = (await session.execute(select(ApiClientSecret).where(
         ApiClientSecret.api_client_id == client.id,
-        ApiClientSecret.tenant_id == tenant_id,
+        ApiClientSecret.tenant_id == client.tenant_id,
         ApiClientSecret.secret_hash == secret_hash,
         or_(ApiClientSecret.status == "ATIVO", (ApiClientSecret.status == "TRANSICAO") & (ApiClientSecret.valid_until > datetime.utcnow())),
     ))).scalar_one_or_none()
-    if client is None or secret is None:
+    if secret is None:
         raise HTTPException(status_code=401, detail="Credencial da aplicação inválida")
     if client.expires_at and client.expires_at < datetime.utcnow():
         raise HTTPException(status_code=401, detail="Credencial da aplicação expirada")

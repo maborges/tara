@@ -20,7 +20,6 @@ Base URL de exemplo: `https://tara.example.com`.
 Para endpoints de integração, envie sempre:
 
 ```http
-X-Tenant-ID: <tenant_uuid>
 X-Balanca-Client-ID: <client_id>
 X-Balanca-Client-Secret: <client_secret>
 Content-Type: application/json
@@ -41,7 +40,7 @@ O segredo não deve ser enviado em query string, logado ou armazenado em fronten
 | `webhooks:manage` | configurar webhook |
 | `webhooks:replay` | solicitar replay |
 
-Respostas de autenticação: `400` para tenant malformado, `401` para credencial ausente/inválida/expirada, `403` para escopo insuficiente. Nunca tente contornar um `403` trocando o header de tenant.
+Respostas de autenticação: `401` para credencial ausente/inválida/expirada, `403` para escopo insuficiente. O tenant e a Conta são resolvidos pela credencial; não tente selecionar outro tenant em caso de falha.
 
 ## 3. Fluxo recomendado
 
@@ -51,14 +50,14 @@ Respostas de autenticação: `400` para tenant malformado, `401` para credencial
 4. A aplicação cria Ordens em `POST /v1/orders` quando houver processo prévio.
 5. A estação sincroniza Ordens pendentes por `GET /v1/stations/sync/pull`.
 6. A estação envia cada captura por `POST /v1/stations/pesagens` ou em lote por `POST /v1/stations/sync/push`.
-7. A aplicação cliente consome o webhook e/ou consulta `GET /v1/weighings` usando cursor.
-8. Pesagens avulsas são reconciliadas por `POST /v1/weighings/{weighing_id}/reconcile`.
+7. A aplicação cliente consulta `GET /v1/orders` e `GET /v1/weighings` usando cursor.
+8. Opcionalmente, a aplicação cliente consome o webhook para receber a notificação em tempo real.
+9. Pesagens avulsas são reconciliadas por `POST /v1/weighings/{weighing_id}/reconcile`.
 
 ## 4. Registrar o sistema cliente
 
 ```http
 POST /v1/clients
-X-Tenant-ID: <tenant_uuid>
 X-Balanca-Client-ID: <client_id>
 X-Balanca-Client-Secret: <client_secret>
 ```
@@ -77,7 +76,6 @@ O trio `sistema_cliente` + `tenant_cliente_id` identifica o sistema externo dent
 
 ```http
 POST /v1/orders
-X-Tenant-ID: <tenant_uuid>
 X-Balanca-Client-ID: <client_id>
 X-Balanca-Client-Secret: <client_secret>
 ```
@@ -101,6 +99,31 @@ X-Balanca-Client-Secret: <client_secret>
 ```
 
 `external_reference` e `correlation_id` são obrigatórios e devem ser estáveis. A TARA devolve `409` quando a referência já está em conflito com outra Ordem.
+
+### Consultar Ordens incrementalmente
+
+Use `orders:read` para sincronizar as Ordens sem depender do Portal. A resposta
+é limitada por `limit` e devolve um cursor opaco para a próxima página:
+
+```http
+GET /v1/orders?status=PENDENTE&limit=100
+X-Balanca-Client-ID: <client_id>
+X-Balanca-Client-Secret: <client_secret>
+```
+
+```json
+{
+  "items": [],
+  "next_cursor": "<cursor-ou-null>"
+}
+```
+
+Continue enviando o cursor recebido até `next_cursor` ser `null`. Persista o
+último cursor confirmado e repita a página inteira em caso de interrupção.
+
+O Backoffice usa a rota administrativa `GET /v1/admin/orders`, protegida pelo
+token humano e pela permissão `backoffice:ordens:gerenciar`. Sistemas clientes
+não devem usar essa rota.
 
 ## 6. Pesagem vinculada ou avulsa
 
@@ -257,7 +280,19 @@ Para encaminhar a revisão, use `status: "PENDENTE_RECONCILIACAO"`. Para rejeita
 
 ## 9. Webhook e HMAC
 
-O evento `balanca.pesagem.concluida.v1` é entregue pelo Outbox por Conta quando o destino estiver configurado. A aplicação receptora deve aceitar rapidamente, persistir o `event_id` e processar o negócio depois. A configuração administrativa de destino por Conta ainda é uma lacuna do Portal TARA; até ela ser entregue, o destino é configurado operacionalmente no ambiente do worker.
+O evento `balanca.pesagem.concluida.v1` é entregue pelo Outbox por Conta quando o destino estiver configurado. A configuração é feita pelo administrador da Conta em **Portal → Webhook**, que também pode enviar um evento de teste antes da homologação. A aplicação receptora deve aceitar rapidamente, persistir o `event_id` e processar o negócio depois. O webhook é opcional: a sincronização pela API deve continuar sendo o mecanismo de recuperação.
+
+O botão **Enviar teste** chama `POST /v1/portal/webhook/test` com a sessão do
+administrador do Portal. A TARA envia o evento sintético
+`tara.webhook.test.v1` ao destino configurado e informa se o endpoint aceitou a
+entrega. Esse teste não cria uma Pesagem nem substitui a homologação de uma
+pesagem real.
+
+Para interromper temporariamente as entregas, alterne o modo para **Somente
+API** no Portal, equivalente a `PATCH /v1/portal/webhook/status` com
+`{"enabled": false}`. A configuração permanece armazenada e o chaveamento
+para **API + Webhook** a reativa; eventos ocorridos durante o período pausado
+devem ser recuperados pela API.
 
 Headers:
 
