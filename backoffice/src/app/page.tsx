@@ -14,13 +14,18 @@ import { PageHeader } from "@/components/shared/page-header";
 import { PlatformEmailSettingsPanel } from "@/components/platform-email-settings";
 import { PlatformSecuritySettingsPanel } from "@/components/platform-security-settings";
 import { Dialog, DialogBody, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { useBackofficeSession, type BackofficeData } from "@/lib/use-backoffice-session";
 
 type View = "overview" | "accounts" | "clients" | "orders" | "weighings" | "stations" | "operators" | "events" | "settings";
 const SCOPES = [["clients:write", "Registrar clientes consumidores"], ["orders:write", "Criar ordens de pesagem"], ["events:read", "Consultar eventos"], ["stations:activate", "Ativar estações"]] as const;
 
 function Badge({ value }: { value: string }) {
-  const tone = ["CONCLUIDA", "ENTREGUE", "ATIVA"].includes(value) ? "bg-green-100 text-green-800 border-green-200" : ["PENDENTE", "EM_PESAGEM"].includes(value) ? "bg-orange-100 text-orange-800 border-orange-200" : "bg-gray-100 text-gray-800 border-gray-200";
+  const tone = ["CONCLUIDA", "ENTREGUE", "ATIVA"].includes(value)
+    ? "border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-200"
+    : ["PENDENTE", "EM_PESAGEM"].includes(value)
+      ? "border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200"
+      : "border-border bg-muted text-foreground";
   return <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium border ${tone}`}>{statusLabel(value)}</span>;
 }
 
@@ -82,7 +87,7 @@ export default function BackofficePage() {
           <header className="flex h-14 shrink-0 items-center gap-4 border-b bg-background px-4">
             <SidebarTrigger />
             <div className="ml-auto flex items-center gap-4">
-              <Button variant="ghost" size="icon" onClick={() => setDark((value) => !value)}>
+              <Button variant="ghost" size="icon" aria-label={dark ? "Ativar modo claro" : "Ativar modo escuro"} onClick={() => setDark((value) => !value)}>
                 {dark ? <Sun size={16} /> : <Moon size={16} />}
               </Button>
               <div className="flex items-center gap-2">
@@ -94,14 +99,14 @@ export default function BackofficePage() {
                   {session.login.slice(0, 1).toUpperCase()}
                 </div>
               </div>
-              <Button variant="ghost" size="icon" onClick={signOut} title="Sair">
+              <Button variant="ghost" size="icon" aria-label="Sair" onClick={signOut} title="Sair">
                 <LogOut size={16} />
               </Button>
             </div>
           </header>
           <div className="flex-1 p-6 overflow-auto">
-            {error && <div className="mb-4 rounded-md border-l-4 border-destructive bg-destructive/10 p-4 text-sm text-destructive">{error}</div>}
-            {view === "overview" ? <Overview data={data} pending={pending} loading={loading} onRefresh={() => void loadData(session)} /> : <DataView view={view} data={data} session={session} loading={loading} onRefresh={() => void loadData(session)} onError={setError} />}
+            {error && <div role="alert" className="mb-4 flex items-start gap-3 rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive"><AlertTriangle className="mt-0.5 size-4 shrink-0" aria-hidden="true" /><span>{error}</span></div>}
+            {view === "overview" ? <Overview data={data} pending={pending} loading={loading} onRefresh={() => void loadData(session)} onNavigate={setView} /> : <DataView view={view} data={data} session={session} loading={loading} onRefresh={() => void loadData(session)} onError={setError} />}
           </div>
         </main>
       </div>
@@ -135,7 +140,7 @@ function LoginScreen({ onLogin }: { onLogin: (session: Session) => void }) {
           style={{ backgroundImage: "url('/login-bg.jpg')" }}
         />
         <div className="absolute inset-0 bg-primary/80 mix-blend-multiply z-0" />
-        <div className="absolute inset-0 bg-gradient-to-t from-primary/95 via-primary/60 to-transparent z-0" />
+        <div className="absolute inset-0 bg-primary/35 z-0" />
 
         {/* Content Layer */}
         <div className="relative z-10 max-w-md space-y-6 text-white">
@@ -156,7 +161,7 @@ function LoginScreen({ onLogin }: { onLogin: (session: Session) => void }) {
               <CardDescription>Use as credenciais administrativas da plataforma.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              {error && <div className="rounded border-l-4 border-destructive bg-destructive/10 p-3 text-sm font-medium text-destructive">{error}</div>}
+              {error && <div role="alert" className="flex items-start gap-2 rounded border border-destructive/30 bg-destructive/10 p-3 text-sm font-medium text-destructive"><AlertTriangle className="mt-0.5 size-4 shrink-0" aria-hidden="true" /><span>{error}</span></div>}
               <div className="space-y-1.5"><label className="text-sm font-medium">Usuário</label><Input required value={loginValue} onChange={(event) => setLoginValue(event.target.value)} placeholder="seu.login" /></div>
               <div className="space-y-1.5"><label className="text-sm font-medium">Senha</label><Input required type="password" value={password} onChange={(event) => setPassword(event.target.value)} placeholder="••••••••" /></div>
               <Button type="submit" className="w-full" disabled={loading}>{loading ? "Entrando…" : "Entrar"}</Button>
@@ -168,7 +173,7 @@ function LoginScreen({ onLogin }: { onLogin: (session: Session) => void }) {
   );
 }
 
-function Overview({ data, pending, loading, onRefresh }: { data: BackofficeData; pending: number; loading: boolean; onRefresh: () => void }) {
+function Overview({ data, pending, loading, onRefresh, onNavigate }: { data: BackofficeData; pending: number; loading: boolean; onRefresh: () => void; onNavigate: (view: View) => void }) {
   const global = data.platformDashboard;
   const completed = global?.orders_completed ?? data.orders.filter((item) => item.status === "CONCLUIDA").length;
   const orderTotal = global?.orders_total ?? data.orders.length;
@@ -191,7 +196,9 @@ function Overview({ data, pending, loading, onRefresh }: { data: BackofficeData;
         icon={<Gauge className="size-6" />}
         actions={<Button variant="outline" size="sm" onClick={onRefresh} disabled={loading}><RefreshCw className={loading ? "animate-spin" : ""} size={14} /> Atualizar</Button>}
       />
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-6">
+      <AttentionPanel data={data} pendingReconciliation={pendingReconciliation} eventsPending={global?.events_pending ?? data.events.filter((item) => item.status !== "ENTREGUE").length} onNavigate={onNavigate} />
+      <div className="flex items-center justify-between gap-4 border-b pb-2"><div><h2 className="text-base font-semibold">Indicadores da operação</h2><p className="text-sm text-muted-foreground">Resumo compacto para acompanhamento administrativo.</p></div></div>
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         <ManagementMetric label={global ? "Ordens em toda a plataforma" : "Ordens no período carregado"} value={global?.orders_total ?? data.orders.length} detail={`${global?.orders_open ?? pending} em aberto`} icon={<ClipboardList size={18} />} tone="blue" />
         <ManagementMetric label="Taxa de conclusão" value={`${completionRate}%`} detail={`${completed} concluídas`} icon={<TrendingUp size={18} />} tone="green" />
         <ManagementMetric label="Pesagens registradas" value={global?.weighings_total ?? data.weighings.length} detail={`${pendingReconciliation} aguardando reconciliação`} icon={<Gauge size={18} />} tone={pendingReconciliation ? "amber" : "green"} />
@@ -213,6 +220,15 @@ function Overview({ data, pending, loading, onRefresh }: { data: BackofficeData;
       <div className="grid gap-6 lg:grid-cols-5"><Card className="lg:col-span-3"><CardHeader><CardTitle>Ordens recentes</CardTitle><CardDescription>Últimos registros recebidos pelo serviço.</CardDescription></CardHeader><CardContent><OrderTable orders={data.orders.slice(0, 6)} hideExport /></CardContent></Card><Card className="lg:col-span-2"><CardHeader><CardTitle>Sistemas clientes e API Keys</CardTitle><CardDescription>{global ? "Integrações consolidadas de toda a plataforma." : "Resumo das credenciais consumidoras."}</CardDescription></CardHeader><CardContent className="space-y-4"><ManagementHealth icon={<Boxes size={16} />} label="Sistemas clientes" value={global?.clients_total ?? data.clients.length} warning={false} /><ManagementHealth icon={<KeyRound size={16} />} label="API Keys ativas" value={global?.api_keys_active ?? data.clients.filter((item) => item.status === "ATIVO").length} warning={false} /><div className="border-t pt-3">{clientSystems.slice(0, 5).map((client) => <div className="flex items-center gap-3 py-2" key={client.client_id}><div className="rounded-md bg-muted p-2"><KeyRound size={14} /></div><div className="min-w-0 flex-1"><p className="truncate text-sm font-medium">{client.nome}</p><p className="truncate text-xs text-muted-foreground">{client.account_name} · {client.client_id}</p><p className="text-xs text-muted-foreground">Último uso: {formatDate(client.last_used_at)}</p></div><Badge value={client.status} /></div>)}{!clientSystems.length && <p className="text-sm text-muted-foreground">Nenhum sistema cliente cadastrado.</p>}</div></CardContent></Card></div>
     </div>
   );
+}
+function AttentionPanel({ data, pendingReconciliation, eventsPending, onNavigate }: { data: BackofficeData; pendingReconciliation: number; eventsPending: number; onNavigate: (view: View) => void }) {
+  const inactiveStations = data.stations.filter((item) => item.status !== "ATIVA").length;
+  const items = [
+    { label: "Reconciliações pendentes", value: pendingReconciliation, view: "weighings" as View, icon: <Timer size={16} />, tone: pendingReconciliation ? "amber" : "green" },
+    { label: "Eventos pendentes ou com falha", value: eventsPending, view: "events" as View, icon: <Server size={16} />, tone: eventsPending ? "amber" : "green" },
+    { label: "Estações fora de operação", value: inactiveStations, view: "stations" as View, icon: <Wifi size={16} />, tone: inactiveStations ? "red" : "green" },
+  ];
+  return <Card className="border-primary/20"><CardHeader className="flex flex-row items-start justify-between gap-4"><div><CardTitle>Atenção agora</CardTitle><CardDescription>Comece pelos itens que podem exigir intervenção.</CardDescription></div><span className="rounded-sm bg-primary/10 px-2 py-1 text-xs font-medium text-primary">Prioridade operacional</span></CardHeader><CardContent className="grid gap-2 md:grid-cols-3">{items.map((item) => <button type="button" key={item.label} onClick={() => onNavigate(item.view)} className="flex min-h-12 items-center gap-3 rounded-md border border-border/80 bg-background px-3 py-2 text-left transition-colors hover:border-primary/40 hover:bg-primary/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"><span className={`rounded-md p-2 ${item.tone === "red" ? "bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-200" : item.tone === "amber" ? "bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-200" : "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-200"}`}>{item.icon}</span><span className="min-w-0 flex-1"><span className="block truncate text-sm font-medium">{item.label}</span><span className="block text-xs text-muted-foreground">Abrir registros relacionados</span></span><strong className={item.value ? "text-foreground" : "text-emerald-700 dark:text-emerald-300"}>{item.value}</strong></button>)}</CardContent></Card>;
 }
 function ManagementMetric({ label, value, detail, icon, tone }: { label: string; value: number | string; detail: string; icon: React.ReactNode; tone: "blue" | "green" | "amber" | "red" }) {
   const colors = { blue: "bg-blue-50 text-blue-700", green: "bg-emerald-50 text-emerald-700", amber: "bg-amber-50 text-amber-700", red: "bg-red-50 text-red-700" };
@@ -277,10 +293,9 @@ function AccountManagementPanel({ account, session }: { account: PlatformAccount
 }
 
 function ClientPanel({ clients, session, onRefresh }: { clients: ApiClient[]; session: Session; onRefresh: () => void }) {
-  const [name, setName] = useState(""); const [scopes, setScopes] = useState<string[]>(["orders:write", "events:read"]); const [expires, setExpires] = useState(""); const [createOpen, setCreateOpen] = useState(false); const [credential, setCredential] = useState<NewCredential | null>(null); const [editing, setEditing] = useState<ApiClient | null>(null); const [editName, setEditName] = useState(""); const [editScopes, setEditScopes] = useState<string[]>([]); const [editExpires, setEditExpires] = useState(""); const [busy, setBusy] = useState(false);
+  const [name, setName] = useState(""); const [scopes, setScopes] = useState<string[]>(["orders:write", "events:read"]); const [expires, setExpires] = useState(""); const [createOpen, setCreateOpen] = useState(false); const [credential, setCredential] = useState<NewCredential | null>(null); const [editing, setEditing] = useState<ApiClient | null>(null); const [editName, setEditName] = useState(""); const [editScopes, setEditScopes] = useState<string[]>([]); const [editExpires, setEditExpires] = useState(""); const [busy, setBusy] = useState(false); const [pendingAction, setPendingAction] = useState<{ kind: "rotate" | "revoke"; client: ApiClient } | null>(null);
   async function submit(event: React.FormEvent) { event.preventDefault(); setBusy(true); try { const created = await createApiClient(session, { nome: name.trim(), scopes, expires_at: expires ? new Date(`${expires}T23:59:59`).toISOString() : null }); setCredential(created); setName(""); setExpires(""); setCreateOpen(false); onRefresh(); toast.success("Credencial criada com sucesso."); } catch (cause) { toast.error(cause instanceof Error ? cause.message : "Falha ao criar credencial."); } finally { setBusy(false); } }
-  async function rotate(clientId: string) { toast.custom((t) => <div className="flex w-full flex-col gap-3 rounded-xl border bg-background p-4 shadow-lg"><div className="flex items-start gap-3"><RotateCcw className="mt-0.5 size-5 text-amber-500 shrink-0" /><div className="flex-1 space-y-1"><p className="text-sm font-semibold">Rotacionar credencial?</p><p className="text-sm text-muted-foreground">O Client Secret atual entrará em transição por 24h e um novo será gerado.</p></div></div><div className="flex justify-end gap-2 border-t pt-3"><Button variant="outline" size="sm" onClick={() => toast.dismiss(t)}>Cancelar</Button><Button size="sm" className="bg-amber-500 text-white hover:bg-amber-600" onClick={async () => { toast.dismiss(t); try { setCredential(await rotateApiClient(session, clientId)); onRefresh(); toast.success("Credencial rotacionada com sucesso."); } catch (cause) { toast.error(cause instanceof Error ? cause.message : "Falha ao rotacionar credencial."); } }}>Rotacionar</Button></div></div>); }
-  async function revoke(clientId: string) { toast.custom((t) => <div className="flex w-full flex-col gap-3 rounded-xl border bg-background p-4 shadow-lg"><div className="flex items-start gap-3"><Ban className="mt-0.5 size-5 text-destructive shrink-0" /><div className="flex-1 space-y-1"><p className="text-sm font-semibold">Revogar credencial?</p><p className="text-sm text-muted-foreground">Todas as chamadas que usam esta credencial deixarão de funcionar.</p></div></div><div className="flex justify-end gap-2 border-t pt-3"><Button variant="outline" size="sm" onClick={() => toast.dismiss(t)}>Cancelar</Button><Button variant="destructive" size="sm" onClick={async () => { toast.dismiss(t); try { await revokeApiClient(session, clientId); onRefresh(); toast.success("Credencial revogada."); } catch (cause) { toast.error(cause instanceof Error ? cause.message : "Falha ao revogar credencial."); } }}>Revogar</Button></div></div>); }
+  async function confirmAction() { if (!pendingAction) return; const { kind, client } = pendingAction; setPendingAction(null); try { if (kind === "rotate") { setCredential(await rotateApiClient(session, client.client_id)); toast.success("Credencial rotacionada com sucesso. O novo segredo está disponível para cópia."); } else { await revokeApiClient(session, client.client_id); toast.success("Credencial revogada. As chamadas que usam esta credencial foram bloqueadas."); } onRefresh(); } catch (cause) { toast.error(cause instanceof Error ? cause.message : kind === "rotate" ? "Falha ao rotacionar credencial." : "Falha ao revogar credencial."); } }
   function startEdit(client: ApiClient) { setEditing(client); setEditName(client.nome); setEditScopes(client.scopes); setEditExpires(client.expires_at ? client.expires_at.slice(0, 10) : ""); }
   async function saveEdit(event: React.FormEvent) { event.preventDefault(); if (!editing) return; setBusy(true); try { await updateApiClient(session, editing.client_id, { nome: editName.trim(), scopes: editScopes, expires_at: editExpires ? new Date(`${editExpires}T23:59:59`).toISOString() : null }); setEditing(null); onRefresh(); toast.success("Credencial atualizada com sucesso."); } catch (cause) { toast.error(cause instanceof Error ? cause.message : "Falha ao atualizar credencial."); } finally { setBusy(false); } }
 
@@ -292,9 +307,9 @@ function ClientPanel({ clients, session, onRefresh }: { clients: ApiClient[]; se
     {
       id: "acoes", header: "Ações", cell: (val, row) => (
         <div className="flex items-center gap-2">
-          <Button variant="ghost" size="icon-sm" onClick={() => startEdit(row)} title="Editar dados permitidos"><Pencil size={14} /></Button>
-          <Button variant="ghost" size="icon-sm" onClick={() => void rotate(row.client_id)} title="Resetar/rotacionar segredo"><RotateCcw size={14} /></Button>
-          {row.status === "ATIVO" && <Button variant="ghost" size="icon-sm" className="text-destructive hover:bg-destructive hover:text-white" onClick={() => void revoke(row.client_id)} title="Revogar"><Ban size={14} /></Button>}
+          <Button variant="ghost" size="icon-sm" aria-label={`Editar ${row.nome}`} onClick={() => startEdit(row)} title="Editar dados permitidos"><Pencil size={14} /></Button>
+          <Button variant="ghost" size="icon-sm" aria-label={`Rotacionar segredo de ${row.nome}`} onClick={() => setPendingAction({ kind: "rotate", client: row })} title="Rotacionar segredo"><RotateCcw size={14} /></Button>
+          {row.status === "ATIVO" && <Button variant="ghost" size="icon-sm" aria-label={`Revogar ${row.nome}`} className="text-destructive hover:bg-destructive hover:text-white" onClick={() => setPendingAction({ kind: "revoke", client: row })} title="Revogar"><Ban size={14} /></Button>}
         </div>
       )
     }
@@ -303,6 +318,7 @@ function ClientPanel({ clients, session, onRefresh }: { clients: ApiClient[]; se
   return (
     <div className="space-y-8">
       <div><Button onClick={() => setCreateOpen(true)}><Plus size={14} className="mr-2" />Nova credencial API</Button></div>
+      <ConfirmDialog open={Boolean(pendingAction)} title={pendingAction?.kind === "rotate" ? `Rotacionar segredo de ${pendingAction.client.nome}?` : `Revogar ${pendingAction?.client.nome}?`} description={pendingAction?.kind === "rotate" ? "O Client Secret atual entrará em transição por 24 horas. Um novo segredo será gerado e deverá ser copiado pelo administrador." : "Todas as chamadas que usam esta credencial deixarão de funcionar. Essa ação não pode ser desfeita automaticamente."} confirmText={pendingAction?.kind === "rotate" ? "Rotacionar segredo" : "Revogar credencial"} destructive={pendingAction?.kind === "revoke"} onConfirm={() => void confirmAction()} onCancel={() => setPendingAction(null)} />
       <Dialog open={createOpen} onOpenChange={setCreateOpen}><DialogContent className="max-w-2xl p-0"><DialogHeader><DialogTitle>Nova credencial API</DialogTitle><DialogDescription>Defina o nome, os escopos e a expiração da credencial.</DialogDescription></DialogHeader><DialogBody><form id="create-api-client-form" onSubmit={submit} className="space-y-4">
         <div className="grid grid-cols-2 gap-4">
           <div className="space-y-1.5"><label className="text-xs font-medium">Nome do sistema consumidor</label><Input required value={name} onChange={(event) => setName(event.target.value)} placeholder="AgroSaaS produção" /></div>

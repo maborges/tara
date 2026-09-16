@@ -1,0 +1,59 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-09-14T00:00:00.000Z",
+  "title": "Design System: Backoffice SaaS",
+  "extensions": {
+    "shadows": [
+      {
+        "name": "low-ambient",
+        "value": "0 1px 2px 0 rgb(0 0 0 / 0.05)",
+        "purpose": "Separação discreta de cards e controles do fundo."
+      },
+      {
+        "name": "premium-subtle",
+        "value": "0 10px 15px -3px rgba(217, 119, 87, 0.05), 0 4px 6px -2px rgba(217, 119, 87, 0.03)",
+        "purpose": "Elevação sutil já presente na implementação."
+      }
+    ],
+    "motion": [
+      {
+        "name": "standard",
+        "value": "all 200ms ease-in-out",
+        "purpose": "Transições curtas de controles, links e estados."
+      }
+    ],
+    "breakpoints": []
+  },
+  "components": [],
+  "narrative": {
+    "northStar": "Central de Controle",
+    "overview": "Interface administrativa compacta, técnica e orientada à operação. Azul conduz ações e navegação; neutros sustentam leitura; cores de módulo comunicam contexto.",
+    "keyCharacteristics": [
+      "Operacional e direto",
+      "Densidade compacta",
+      "Sem degradês",
+      "Cantos pequenos e bordas discretas"
+    ],
+    "rules": [
+      {
+        "name": "The No-Gradient Rule",
+        "body": "Não usar degradês; priorizar cores sólidas e contraste funcional.",
+        "section": "colors"
+      },
+      {
+        "name": "The Compact Type Rule",
+        "body": "Manter a hierarquia dentro de uma escala compacta.",
+        "section": "typography"
+      }
+    ],
+    "dos": [
+      "Do manter a interface compacta e orientada à operação.",
+      "Do usar azul para ações, foco e navegação ativa.",
+      "Do usar cores de módulo com função semântica clara."
+    ],
+    "donts": [
+      "Don't usar degradês.",
+      "Don't introduzir efeitos chamativos ou espaçamento excessivo sem necessidade operacional."
+    ]
+  }
+}
