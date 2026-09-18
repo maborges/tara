@@ -61,6 +61,8 @@ export default function HomePage() {
         fazenda_ids: resp.fazenda_ids,
         expires_at: resp.expires_at,
         last_sync_at: null,
+        installation_id: resp.installation_id,
+        device_configuration_id: resp.device_configuration_id,
         bridge_url: null,
         bridge_token: null,
         recovery_secret_hash: resp.recovery_secret ? await hashLocalCredential(resp.recovery_secret) : null,
@@ -96,7 +98,8 @@ export default function HomePage() {
                 className="uppercase tracking-widest"
                 value={activationCode}
                 onChange={(e) => setActivationCode(e.target.value)}
-                maxLength={8}
+                minLength={12}
+                maxLength={12}
                 required
               />
             </div>

@@ -37,6 +37,10 @@ export async function pushSync(): Promise<{ ok: boolean; sincronizados: number; 
         payload: pesagem
           ? {
               ordem_id: pesagem.ordem_id,
+              authorization_id: pesagem.authorization_id,
+              authorization_nonce: pesagem.authorization_nonce,
+              installation_id: pesagem.installation_id,
+              device_configuration_id: pesagem.device_configuration_id ?? session.device_configuration_id,
               subject_type: pesagem.subject_type,
               tipo_pesagem: pesagem.tipo_pesagem,
               etapa: pesagem.etapa,
@@ -51,6 +55,12 @@ export async function pushSync(): Promise<{ ok: boolean; sincronizados: number; 
               animal_id: pesagem.animal_id,
               pessoa_id: pesagem.pessoa_id,
               operador_pessoa_id: pesagem.operador_pessoa_id,
+              operador_id: pesagem.operador_id,
+              direcao_veiculo: pesagem.direcao_veiculo,
+              natureza_mercadoria: pesagem.natureza_mercadoria,
+              tipo_operacao: pesagem.tipo_operacao,
+              contexto: { ...pesagem.contexto, placa: pesagem.placa, motorista: pesagem.motorista,
+                animal_id: pesagem.animal_id, numero_ticket: pesagem.numero_ticket },
               data_pesagem: pesagem.data_pesagem,
             }
           : {},

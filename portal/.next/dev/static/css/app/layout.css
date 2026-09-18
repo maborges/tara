@@ -450,6 +450,9 @@
   .h-svh {
     height: 100svh;
   }
+  .max-h-28 {
+    max-height: calc(var(--spacing) * 28);
+  }
   .min-h-0 {
     min-height: 0px;
   }
@@ -497,6 +500,9 @@
   }
   .max-w-\(--skeleton-width\) {
     max-width: var(--skeleton-width);
+  }
+  .max-w-48 {
+    max-width: calc(var(--spacing) * 48);
   }
   .max-w-56 {
     max-width: calc(var(--spacing) * 56);
@@ -562,6 +568,9 @@
   }
   .cursor-help {
     cursor: help;
+  }
+  .cursor-pointer {
+    cursor: pointer;
   }
   .flex-col {
     flex-direction: column;
@@ -1483,6 +1492,9 @@
     .hover\:text-accent-foreground:hover {
       color: hsl(var(--accent-foreground));
     }
+    .hover\:text-destructive:hover {
+      color: hsl(var(--destructive));
+    }
     .hover\:text-primary:hover {
       color: hsl(var(--primary));
     }
@@ -1587,6 +1599,9 @@
     }
   }
   @media (width >= 40rem) {
+    .sm\:col-span-2 {
+      grid-column: span 2 / span 2;
+    }
     .sm\:flex {
       display: flex;
     }
@@ -1650,6 +1665,9 @@
     }
   }
   @media (width >= 64rem) {
+    .lg\:col-span-4 {
+      grid-column: span 4 / span 4;
+    }
     .lg\:max-w-sm {
       max-width: var(--container-sm);
     }

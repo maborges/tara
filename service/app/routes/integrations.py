@@ -1,21 +1,25 @@
 from fastapi import APIRouter, Depends, Header, HTTPException, Query
+import httpx
 import base64
 import json
-from datetime import datetime
+from datetime import datetime, timedelta
 import uuid
-from sqlalchemy import and_, or_, select
+from sqlalchemy import or_, select, update, func
 
 from ..auth import get_session, require_station, set_tenant_context
 from ..security import require_backoffice, require_client_scope
 from ..config import get_settings
-from ..models import ApiClient, Cliente, Conta, Estacao, EstacaoOperador, Operador, Ordem, Outbox, OutboxReplayAudit, Pesagem
+from ..models import ApiClient, Cliente, Conta, Estacao, EstacaoInstalacao, EstacaoOperador, DeviceConfiguration, BridgeValidation, Operador, Ordem, Outbox, OutboxReplayAudit, Pesagem
 from ..schemas import (
     ActivationIn, ActivationOut, AccountOut, ClientIn, ClientOut, EventOut, EventReplayAuditOut, OperatorIn, OperatorOut, ProvisionedOperatorOut, StationProvisioningOut,
     OrderIn, OrderOut, OrderPageOut, StationIn, StationOut, WeighingIn, WeighingOut, WeighingPageOut, WeighingReconciliationIn,
     SyncPushIn, SyncPushOut, SyncResultOut, OperatorLoginIn, LoginIn, LoginOut,
     ApiClientIn, ApiClientUpdateIn, ApiClientOut, ApiClientCredentialOut, ApiClientStatusOut, ApiClientListOut,
     ContingencyPackageIn, ContingencyImportOut,
+    DeviceConfigurationIn, DeviceConfigurationOut, BridgeValidationIn, BridgeValidationOut,
 )
+from .. import schemas
+from .. import models
 from ..contingency_service import import_contingency_package
 from ..operation import (
     activate_station, complete_weighing, create_operator, create_order, create_station,
@@ -392,12 +396,167 @@ async def post_station_activation(
 ):
     tenant_id, session, _client = context
     try:
-        station, token, recovery_secret = await activate_station(session, tenant_id, data)
+        station, token, recovery_secret, installation_id, device_configuration_id = await activate_station(session, tenant_id, data)
     except ValueError as exc:
         await session.rollback()
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     await session.commit()
-    return ActivationOut(station_id=station.id, station_token=token, recovery_secret=recovery_secret)
+    return ActivationOut(
+        station_id=station.id,
+        station_token=token,
+        tenant_id=tenant_id,
+        nome=station.nome,
+        recovery_secret=recovery_secret,
+        installation_id=installation_id,
+        device_configuration_id=device_configuration_id,
+    )
+
+
+@router.post("/stations/device-configurations", response_model=DeviceConfigurationOut, status_code=201)
+async def post_device_configuration(
+    data: DeviceConfigurationIn,
+    context=Depends(require_station),
+):
+    tenant_id, session, station = context
+    installation = (await session.execute(select(EstacaoInstalacao).where(
+        EstacaoInstalacao.id == data.installation_id,
+        EstacaoInstalacao.tenant_id == tenant_id,
+        EstacaoInstalacao.estacao_id == station.id,
+    ))).scalar_one_or_none()
+    if installation is None:
+        raise HTTPException(status_code=404, detail="Instalação não encontrada")
+    if installation.status != "ACTIVE":
+        raise HTTPException(status_code=403, detail="Instalação substituída não pode alterar configuração")
+        
+    import secrets
+    from ..platform_identity import encrypt_platform_secret
+    
+    proof_key = secrets.token_hex(32)
+
+    device_config = DeviceConfiguration(
+        id=uuid.uuid4(),
+        tenant_id=tenant_id,
+        estacao_id=station.id,
+        instalacao_id=installation.id,
+        bridge_url=data.bridge_url,
+        status="PENDING",
+        proof_key_encrypted=encrypt_platform_secret(proof_key),
+        created_at=datetime.utcnow(),
+    )
+    session.add(device_config)
+    await session.commit()
+
+    return DeviceConfigurationOut(
+        id=device_config.id,
+        installation_id=device_config.instalacao_id,
+        bridge_url=device_config.bridge_url,
+        status=device_config.status,
+        bridge_proof_key=proof_key
+    )
+
+
+@router.post("/stations/bridge-validations/challenge", response_model=schemas.BridgeChallengeOut, status_code=201)
+async def post_bridge_validation_challenge(data: schemas.BridgeChallengeIn, context=Depends(require_station)):
+    tenant_id, session, station = context
+    installation = station.authenticated_installation
+    if installation.status != "ACTIVE":
+        raise HTTPException(status_code=403, detail="Instalação substituída não pode validar Bridge")
+    
+    dev_config = (await session.execute(
+        select(DeviceConfiguration).where(
+            DeviceConfiguration.id == data.device_configuration_id,
+            DeviceConfiguration.tenant_id == tenant_id,
+            DeviceConfiguration.instalacao_id == installation.id
+        )
+    )).scalar_one_or_none()
+    
+    if not dev_config or dev_config.status != "PENDING":
+        raise HTTPException(status_code=422, detail="Configuração de dispositivo inválida ou já ativada")
+        
+    import secrets
+    challenge_id = uuid.uuid4()
+    nonce = secrets.token_hex(32)
+    challenge = models.BridgeChallenge(
+        id=challenge_id,
+        tenant_id=tenant_id,
+        instalacao_id=installation.id,
+        nonce=nonce,
+        expires_at=datetime.utcnow() + timedelta(minutes=5),
+    )
+    session.add(challenge)
+    await session.commit()
+    return schemas.BridgeChallengeOut(challenge_id=challenge_id, nonce=nonce)
+
+
+@router.post("/stations/bridge-validations", response_model=BridgeValidationOut, status_code=201)
+async def post_bridge_validation(data: BridgeValidationIn, context=Depends(require_station)):
+    tenant_id, session, station = context
+    installation = station.authenticated_installation
+    if installation.status != "ACTIVE":
+        raise HTTPException(status_code=403, detail="Instalação substituída não pode validar Bridge")
+    
+    challenge = (await session.execute(
+        select(models.BridgeChallenge).where(
+            models.BridgeChallenge.id == data.challenge_id,
+            models.BridgeChallenge.tenant_id == tenant_id,
+            models.BridgeChallenge.instalacao_id == installation.id,
+            models.BridgeChallenge.used_at.is_(None),
+            models.BridgeChallenge.expires_at > datetime.utcnow()
+        )
+    )).scalar_one_or_none()
+    
+    if challenge is None:
+        raise HTTPException(status_code=422, detail="Desafio inválido ou expirado")
+        
+    # Precisamos da config pendente
+    dev_config = (await session.execute(
+        select(DeviceConfiguration).where(
+            DeviceConfiguration.instalacao_id == installation.id,
+            DeviceConfiguration.status == "PENDING"
+        )
+    )).scalar_one_or_none()
+    
+    if not dev_config or not dev_config.proof_key_encrypted:
+        raise HTTPException(status_code=422, detail="Nenhuma configuração pendente ou chave de prova encontrada")
+        
+    # Verificar o HMAC (Challenge-Response) usando a chave previamente salva pela Nuvem
+    import hmac
+    import hashlib
+    from ..platform_identity import decrypt_platform_secret
+    
+    canonical_challenge = f"{challenge.id}|{challenge.nonce}|{station.id}|{installation.id}|{challenge.expires_at.isoformat()}"
+    proof_key = decrypt_platform_secret(dev_config.proof_key_encrypted)
+    
+    expected_hmac = hmac.new(
+        key=proof_key.encode(),
+        msg=canonical_challenge.encode(),
+        digestmod=hashlib.sha256
+    ).hexdigest()
+    
+    if not hmac.compare_digest(expected_hmac, data.bridge_token_proof):
+        raise HTTPException(status_code=403, detail="Falha na prova criptográfica da Bridge")
+        
+    challenge.used_at = datetime.utcnow()
+    
+    # Ativa a nova config e inativa as antigas
+    await session.execute(
+        update(DeviceConfiguration)
+        .where(DeviceConfiguration.instalacao_id == installation.id, DeviceConfiguration.status == "ACTIVE")
+        .values(status="INACTIVE", replaced_at=datetime.utcnow())
+    )
+    dev_config.status = "ACTIVE"
+    
+    evidence = BridgeValidation(
+        id=uuid.uuid4(),
+        tenant_id=tenant_id,
+        instalacao_id=installation.id,
+        bridge_url=data.bridge_url,
+        token_proof_hash="VERIFIED",
+        expires_at=datetime.utcnow() + timedelta(minutes=10)
+    )
+    session.add(evidence)
+    await session.commit()
+    return BridgeValidationOut(validation_id=evidence.id)
 
 
 @router.post("/operators", response_model=OperatorOut, status_code=201)
@@ -450,6 +609,8 @@ async def put_station_operator(
     operator = (await session.execute(select(Operador).where(Operador.id == operator_id, Operador.tenant_id == tenant_id))).scalar_one_or_none()
     if station is None or operator is None:
         raise HTTPException(status_code=404, detail="Estação ou operador não encontrado")
+    if operator.status != "ATIVO":
+        raise HTTPException(status_code=422, detail="Ative o operador antes de vinculá-lo a uma estação")
     link = (await session.execute(select(EstacaoOperador).where(
         EstacaoOperador.estacao_id == station_id, EstacaoOperador.operador_id == operator_id
     ))).scalar_one_or_none()
@@ -517,12 +678,17 @@ async def post_station_operator_login(
     import hashlib
     import hmac
 
-    tenant_id, session, _station = context
+    tenant_id, session, station = context
+    installation = station.authenticated_installation
+    if installation.status != "ACTIVE":
+        raise HTTPException(status_code=403, detail="Instalação substituída não pode operar")
     operator = (await session.execute(
-        select(Operador).where(
+        select(Operador).join(EstacaoOperador, EstacaoOperador.operador_id == Operador.id).where(
             Operador.id == data.operador_id,
             Operador.tenant_id == tenant_id,
             Operador.status == "ATIVO",
+            EstacaoOperador.estacao_id == station.id,
+            EstacaoOperador.status == "ATIVO",
         )
     )).scalar_one_or_none()
     expected = hashlib.sha256(data.pin.encode()).hexdigest()
@@ -539,11 +705,78 @@ async def post_station_operator_login(
     }
 
 
+@router.post("/stations/offline-authorizations/replenish", response_model=schemas.OfflineCaptureAuthorizationReplenishOut, status_code=201)
+async def post_offline_authorizations_replenish(data: schemas.OfflineCaptureAuthorizationReplenishIn, context=Depends(require_station)):
+    tenant_id, session, station = context
+    installation = station.authenticated_installation
+    if installation.status != "ACTIVE":
+        raise HTTPException(status_code=403, detail="Instalação inativa não pode obter novas autorizações")
+        
+    dev_config = (await session.execute(
+        select(DeviceConfiguration).where(
+            DeviceConfiguration.id == data.device_configuration_id,
+            DeviceConfiguration.tenant_id == tenant_id,
+            DeviceConfiguration.instalacao_id == installation.id
+        )
+    )).scalar_one_or_none()
+    
+    if not dev_config or dev_config.status != "ACTIVE":
+        raise HTTPException(status_code=422, detail="Configuração inválida ou inativa")
+        
+    # Verifica quantas disponíveis ainda existem
+    count_existing = (await session.execute(
+        select(func.count(models.OfflineCaptureAuthorization.id)).where(
+            models.OfflineCaptureAuthorization.instalacao_id == installation.id,
+            models.OfflineCaptureAuthorization.device_configuration_id == dev_config.id,
+            models.OfflineCaptureAuthorization.status == "AVAILABLE",
+            models.OfflineCaptureAuthorization.expires_at > datetime.utcnow()
+        )
+    )).scalar() or 0
+    
+    needed = max(0, data.count - count_existing)
+    new_auths = []
+    
+    import secrets
+    now = datetime.utcnow()
+    expires_at = now + timedelta(days=7) # 7 dias de limite para operação offline sem rede
+    
+    for _ in range(needed):
+        auth = models.OfflineCaptureAuthorization(
+            id=uuid.uuid4(),
+            tenant_id=tenant_id,
+            estacao_id=station.id,
+            instalacao_id=installation.id,
+            device_configuration_id=dev_config.id,
+            status="AVAILABLE",
+            nonce=secrets.token_hex(16),
+            expires_at=expires_at,
+            created_at=now
+        )
+        session.add(auth)
+        new_auths.append(auth)
+        
+    if new_auths:
+        await session.commit()
+        
+    # Retorna as geradas
+    return schemas.OfflineCaptureAuthorizationReplenishOut(
+        items=[
+            schemas.OfflineCaptureAuthorizationOut(
+                id=a.id,
+                nonce=a.nonce,
+                expires_at=a.expires_at
+            ) for a in new_auths
+        ]
+    )
+
 @router.post("/stations/pesagens", response_model=WeighingOut, status_code=201)
 async def post_weighing(data: WeighingIn, context=Depends(require_station)):
     tenant_id, session, station = context
+    installation = station.authenticated_installation
+    if installation.status != "ACTIVE":
+        raise HTTPException(status_code=403, detail="Instalação substituída não pode criar novas pesagens")
     try:
-        capture = data.model_copy(update={"estacao_id": station.id})
+        capture = data.model_copy(update={"estacao_id": station.id, "installation_id": installation.id})
         weight = await complete_weighing(session, tenant_id, capture)
     except ValueError as exc:
         await session.rollback()
@@ -555,15 +788,49 @@ async def post_weighing(data: WeighingIn, context=Depends(require_station)):
 @router.post("/stations/sync/push", response_model=SyncPushOut)
 async def post_sync(data: SyncPushIn, context=Depends(require_station)):
     tenant_id, session, station = context
+    installation = station.authenticated_installation
     results = []
+    
     for item in data.items:
         payload = item.payload
         try:
+            if payload.get("installation_id") != str(installation.id):
+                raise ValueError("A pesagem não pertence à instalação autenticada")
+            
+            # Validação da Autorização de Captura
+            auth_id_str = payload.get("authorization_id") or (item.authorization_id if hasattr(item, 'authorization_id') else None)
+            if not auth_id_str:
+                raise ValueError("Pesagem não autorizada: ausência de authorization_id")
+            
+            auth = (await session.execute(
+                select(models.OfflineCaptureAuthorization).where(
+                    models.OfflineCaptureAuthorization.id == auth_id_str,
+                    models.OfflineCaptureAuthorization.tenant_id == tenant_id,
+                    models.OfflineCaptureAuthorization.instalacao_id == installation.id
+                )
+            )).scalar_one_or_none()
+            
+            if not auth:
+                raise ValueError("Autorização de captura inválida ou não pertence a esta instalação")
+                
+            if auth.status == "CONSUMED":
+                if auth.consumed_by_local_id != item.local_id:
+                    raise ValueError("Autorização já consumida por outra pesagem (replay detectado)")
+                # Idempotência: já consumida pelo MESMO local_id é aceita
+            else:
+                if auth.expires_at < datetime.utcnow():
+                    raise ValueError("Autorização expirada")
+                auth.status = "CONSUMED"
+                auth.consumed_by_local_id = item.local_id
+                auth.consumed_at = datetime.utcnow()
+            
             weight = await complete_weighing(
                 session,
                 tenant_id,
                 WeighingIn(
                     estacao_id=station.id,
+                    installation_id=payload.get("installation_id"),
+                    device_configuration_id=payload.get("device_configuration_id"),
                     ordem_id=payload.get("ordem_id"),
                     client_system=payload.get("client_system"),
                     client_tenant_id=payload.get("client_tenant_id"),
@@ -575,6 +842,7 @@ async def post_sync(data: SyncPushIn, context=Depends(require_station)):
                     peso_informado_kg=payload.get("peso_informado_kg"),
                     peso_tara_kg=payload.get("peso_tara_kg"),
                     captured_via=payload.get("captured_via", "MANUAL"),
+                    operador_id=payload.get("operador_id"),
                     leitura_bruta=payload.get("leitura_bruta"),
                     captured_at=payload.get("data_pesagem"),
                     direcao_veiculo=payload.get("direcao_veiculo"),
@@ -592,7 +860,10 @@ async def post_sync(data: SyncPushIn, context=Depends(require_station)):
 
 @router.get("/stations/sync/pull")
 async def get_sync(context=Depends(require_station)):
-    tenant_id, session, _station = context
+    tenant_id, session, station = context
+    installation = station.authenticated_installation
+    if installation.status != "ACTIVE":
+        raise HTTPException(status_code=403, detail="Instalação substituída não pode receber novas ordens")
     result = await session.execute(
         select(Ordem).where(Ordem.tenant_id == tenant_id, Ordem.status == "PENDENTE")
         .order_by(Ordem.created_at)
@@ -658,7 +929,7 @@ async def replay_admin_event(
     context=Depends(require_backoffice("backoffice:eventos:consultar")),
 ):
     """Reenfileira um evento sem duplicar o registro nem alterar seu payload."""
-    tenant_id, session, _user = context
+    tenant_id, session, user = context
     event = (await session.execute(select(Outbox).where(
         Outbox.id == event_id, Outbox.tenant_id == tenant_id,
     ))).scalar_one_or_none()

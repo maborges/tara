@@ -61,6 +61,20 @@ psql -h 192.168.0.3 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/008_a
 psql -h 192.168.0.3 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/009_rename_balanca_schema.sql
 psql -h 192.168.0.3 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/010_station_account.sql
 psql -h 192.168.0.3 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/011_pesagem_avulsa.sql
+psql -h 192.168.0.3 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/012_platform_admin_rls.sql
+psql -h 192.168.0.3 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/013_webhook_destinations.sql
+psql -h 192.168.0.3 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/014_outbox_replay_audit.sql
+psql -h 192.168.0.3 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/015_webhook_retry_policy.sql
+psql -h 192.168.0.3 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/016_platform_dashboard_rls.sql
+psql -h 192.168.0.3 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/017_pesagem_station.sql
+psql -h 192.168.0.3 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/018_table_comments.sql
+psql -h 192.168.0.3 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/019_pesagem_immutability.sql
+psql -h 192.168.0.3 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/020_shadow_order_status.sql
+psql -h 192.168.0.3 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/021_client_logical_key.sql
+psql -h 192.168.0.3 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/022_station_operator_provisioning.sql
+psql -h 192.168.0.3 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/023_credential_lookup_without_tenant.sql
+psql -h 192.168.0.3 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/024_remove_duplicate_api_client_secret_hash.sql
+psql -h 192.168.0.3 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/025_operator_status_and_normalized_external_id.sql
 ```
 
 Então, inicie a API:

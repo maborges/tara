@@ -6,7 +6,7 @@ por consumidor e token separado para estações, além do outbox Observer.
 
 O serviço não importa módulos de domínio do AgroSaaS nem acessa tabelas do
 cliente. A única fronteira compartilhada é o contrato de integração e o schema
-`balanca` dentro do banco PostgreSQL `farms`.
+`tara` dentro do banco PostgreSQL `farms`.
 
 Manual operacional: [docs/MANUAL_OPERACAO.md](docs/MANUAL_OPERACAO.md).
 
@@ -18,31 +18,32 @@ Comandos:
     python3 -m venv .venv
     ./.venv/bin/pip install -r requirements.txt
     cp .env.example .env
-    psql --set=ON_ERROR_STOP=1 "$TARA_DATABASE_URL" -f migrations/000_platform_foundation.sql
-    psql --set=ON_ERROR_STOP=1 "$TARA_DATABASE_URL" -f migrations/001_service_tables.sql
-    psql --set=ON_ERROR_STOP=1 "$TARA_DATABASE_URL" -f migrations/002_security_identity.sql
-    psql --set=ON_ERROR_STOP=1 "$TARA_DATABASE_URL" -f migrations/003_contingency.sql
-    psql --set=ON_ERROR_STOP=1 "$TARA_DATABASE_URL" -f migrations/004_platform_admin.sql
-    psql --set=ON_ERROR_STOP=1 "$TARA_DATABASE_URL" -f migrations/005_customer_portal.sql
-    psql --set=ON_ERROR_STOP=1 "$TARA_DATABASE_URL" -f migrations/006_portal_email_security.sql
-    psql --set=ON_ERROR_STOP=1 "$TARA_DATABASE_URL" -f migrations/007_platform_email_settings.sql
-    psql --set=ON_ERROR_STOP=1 "$TARA_DATABASE_URL" -f migrations/008_api_client_secret_rotation.sql
-    psql --set=ON_ERROR_STOP=1 "$TARA_DATABASE_URL" -f migrations/009_rename_balanca_schema.sql
-    psql --set=ON_ERROR_STOP=1 "$TARA_DATABASE_URL" -f migrations/010_station_account.sql
-    psql --set=ON_ERROR_STOP=1 "$TARA_DATABASE_URL" -f migrations/011_pesagem_avulsa.sql
-    psql --set=ON_ERROR_STOP=1 "$TARA_DATABASE_URL" -f migrations/012_platform_admin_rls.sql
-    psql --set=ON_ERROR_STOP=1 "$TARA_DATABASE_URL" -f migrations/013_webhook_destinations.sql
-    psql --set=ON_ERROR_STOP=1 "$TARA_DATABASE_URL" -f migrations/014_outbox_replay_audit.sql
-    psql --set=ON_ERROR_STOP=1 "$TARA_DATABASE_URL" -f migrations/015_webhook_retry_policy.sql
-    psql --set=ON_ERROR_STOP=1 "$TARA_DATABASE_URL" -f migrations/016_platform_dashboard_rls.sql
-    psql --set=ON_ERROR_STOP=1 "$TARA_DATABASE_URL" -f migrations/017_pesagem_station.sql
-    psql --set=ON_ERROR_STOP=1 "$TARA_DATABASE_URL" -f migrations/018_table_comments.sql
-    psql --set=ON_ERROR_STOP=1 "$TARA_DATABASE_URL" -f migrations/023_credential_lookup_without_tenant.sql
-    psql --set=ON_ERROR_STOP=1 "$TARA_DATABASE_URL" -f migrations/024_remove_duplicate_api_client_secret_hash.sql
-    psql --set=ON_ERROR_STOP=1 "$TARA_DATABASE_URL" -f migrations/019_pesagem_immutability.sql
-    psql --set=ON_ERROR_STOP=1 "$TARA_DATABASE_URL" -f migrations/020_shadow_order_status.sql
-    psql --set=ON_ERROR_STOP=1 "$TARA_DATABASE_URL" -f migrations/021_client_logical_key.sql
-    psql --set=ON_ERROR_STOP=1 "$TARA_DATABASE_URL" -f migrations/022_station_operator_provisioning.sql
+    export TARA_PSQL_URL=postgresql://usuario:senha@host:5432/farms
+    psql --set=ON_ERROR_STOP=1 "$TARA_PSQL_URL" -f migrations/000_platform_foundation.sql
+    psql --set=ON_ERROR_STOP=1 "$TARA_PSQL_URL" -f migrations/001_service_tables.sql
+    psql --set=ON_ERROR_STOP=1 "$TARA_PSQL_URL" -f migrations/002_security_identity.sql
+    psql --set=ON_ERROR_STOP=1 "$TARA_PSQL_URL" -f migrations/003_contingency.sql
+    psql --set=ON_ERROR_STOP=1 "$TARA_PSQL_URL" -f migrations/004_platform_admin.sql
+    psql --set=ON_ERROR_STOP=1 "$TARA_PSQL_URL" -f migrations/005_customer_portal.sql
+    psql --set=ON_ERROR_STOP=1 "$TARA_PSQL_URL" -f migrations/006_portal_email_security.sql
+    psql --set=ON_ERROR_STOP=1 "$TARA_PSQL_URL" -f migrations/007_platform_email_settings.sql
+    psql --set=ON_ERROR_STOP=1 "$TARA_PSQL_URL" -f migrations/008_api_client_secret_rotation.sql
+    psql --set=ON_ERROR_STOP=1 "$TARA_PSQL_URL" -f migrations/009_rename_balanca_schema.sql
+    psql --set=ON_ERROR_STOP=1 "$TARA_PSQL_URL" -f migrations/010_station_account.sql
+    psql --set=ON_ERROR_STOP=1 "$TARA_PSQL_URL" -f migrations/011_pesagem_avulsa.sql
+    psql --set=ON_ERROR_STOP=1 "$TARA_PSQL_URL" -f migrations/012_platform_admin_rls.sql
+    psql --set=ON_ERROR_STOP=1 "$TARA_PSQL_URL" -f migrations/013_webhook_destinations.sql
+    psql --set=ON_ERROR_STOP=1 "$TARA_PSQL_URL" -f migrations/014_outbox_replay_audit.sql
+    psql --set=ON_ERROR_STOP=1 "$TARA_PSQL_URL" -f migrations/015_webhook_retry_policy.sql
+    psql --set=ON_ERROR_STOP=1 "$TARA_PSQL_URL" -f migrations/016_platform_dashboard_rls.sql
+    psql --set=ON_ERROR_STOP=1 "$TARA_PSQL_URL" -f migrations/017_pesagem_station.sql
+    psql --set=ON_ERROR_STOP=1 "$TARA_PSQL_URL" -f migrations/018_table_comments.sql
+    psql --set=ON_ERROR_STOP=1 "$TARA_PSQL_URL" -f migrations/019_pesagem_immutability.sql
+    psql --set=ON_ERROR_STOP=1 "$TARA_PSQL_URL" -f migrations/020_shadow_order_status.sql
+    psql --set=ON_ERROR_STOP=1 "$TARA_PSQL_URL" -f migrations/021_client_logical_key.sql
+    psql --set=ON_ERROR_STOP=1 "$TARA_PSQL_URL" -f migrations/022_station_operator_provisioning.sql
+    psql --set=ON_ERROR_STOP=1 "$TARA_PSQL_URL" -f migrations/023_credential_lookup_without_tenant.sql
+    psql --set=ON_ERROR_STOP=1 "$TARA_PSQL_URL" -f migrations/024_remove_duplicate_api_client_secret_hash.sql
     ./start_server.sh
 
 Endpoints:
@@ -66,9 +67,10 @@ Endpoints:
 - GET /v1/admin/events/{id}/replays.
 - GET/PUT /v1/portal/users e /v1/portal/users/{id}.
 
-O worker independente pode ser executado com python run_worker.py; para
-produção, use balanca-outbox.service.example. Ele entrega por HTTP ou arquivo
-JSONL, com retry e idempotência.
+O worker independente pode ser executado com `./.venv/bin/python run_worker.py`;
+para produção, use `balanca-outbox.service.example`. Configure
+`TARA_OUTBOX_TENANT_IDS` com os tenants que ele atende. Ele entrega por HTTP ou
+arquivo JSONL, com retry e idempotência.
 
 ## Primeiro acesso do backoffice
 

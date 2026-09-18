@@ -16,7 +16,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from app.db import _engine, set_tenant_context
 from app.main import app
-from app.service import bootstrap_admin, create_api_client
+from app.service import bootstrap_admin, create_api_client, update_operator_status, update_station_status
 
 
 @pytest.mark.asyncio
@@ -97,6 +97,8 @@ async def test_standalone_service_order_station_weighing_observer_flow():
         )
         assert response.status_code == 200, response.text
         station_id = response.json()["station_id"]
+        installation_id = response.json()["installation_id"]
+        device_configuration_id = response.json()["device_configuration_id"]
         station_headers = {
             "Authorization": f"Bearer {response.json()['station_token']}",
         }
@@ -123,6 +125,34 @@ async def test_standalone_service_order_station_weighing_observer_flow():
         )
         assert response.status_code == 200, response.text
 
+        async with async_sessionmaker(_engine, expire_on_commit=False)() as session:
+            await set_tenant_context(session, tenant_id)
+            await update_operator_status(session, uuid.UUID(tenant_id), uuid.UUID(operator_id), "INATIVO")
+            await session.commit()
+        response = await client.post(
+            "/v1/stations/operators/login",
+            headers=station_headers,
+            json={"operador_id": operator_id, "pin": "1234"},
+        )
+        assert response.status_code == 401, response.text
+
+        async with async_sessionmaker(_engine, expire_on_commit=False)() as session:
+            await set_tenant_context(session, tenant_id)
+            await update_operator_status(session, uuid.UUID(tenant_id), uuid.UUID(operator_id), "ATIVO")
+            await session.commit()
+
+        async with async_sessionmaker(_engine, expire_on_commit=False)() as session:
+            await set_tenant_context(session, tenant_id)
+            await update_station_status(session, uuid.UUID(tenant_id), uuid.UUID(station_id), "SUSPENSA")
+            await session.commit()
+        response = await client.get("/v1/stations/operators", headers=station_headers)
+        assert response.status_code == 401, response.text
+
+        async with async_sessionmaker(_engine, expire_on_commit=False)() as session:
+            await set_tenant_context(session, tenant_id)
+            await update_station_status(session, uuid.UUID(tenant_id), uuid.UUID(station_id), "ATIVA")
+            await session.commit()
+
         response = await client.post(
             "/v1/stations/sync/push",
             headers=station_headers,
@@ -131,6 +161,8 @@ async def test_standalone_service_order_station_weighing_observer_flow():
                     "local_id": str(uuid.uuid4()),
                     "payload": {
                         "ordem_id": order_id,
+                        "installation_id": installation_id,
+                        "device_configuration_id": device_configuration_id,
                         "etapa": "UNICA",
                         "peso_aferido_kg": "12000.000",
                         "peso_tara_kg": "1000.000",
@@ -145,6 +177,38 @@ async def test_standalone_service_order_station_weighing_observer_flow():
         response = await client.get("/v1/weighings?limit=1", headers=integration_headers)
         assert response.status_code == 200, response.text
         assert response.json()["items"][0]["estacao_id"] == station_id
+
+        # Uma pesagem dupla só conclui a ordem e publica o evento após a
+        # etapa final; a primeira captura mantém a operação em andamento.
+        response = await client.post(
+            "/v1/orders", headers=integration_headers, json={
+                "client_system": "agrosaas", "client_tenant_id": "fazenda-service-e2e",
+                "external_reference": f"dupla-{uuid.uuid4()}", "correlation_id": f"dupla-{uuid.uuid4()}",
+                "subject_type": "VEICULO", "tipo_pesagem": "DUPLA", "contexto": {},
+            },
+        )
+        assert response.status_code == 201, response.text
+        double_order_id = response.json()["id"]
+        response = await client.post(
+            "/v1/stations/pesagens", headers=station_headers, json={
+                "ordem_id": double_order_id, "local_id": str(uuid.uuid4()), "etapa": "CHEGADA",
+                "peso_aferido_kg": "13000.000", "peso_tara_kg": "1000.000",
+            },
+        )
+        assert response.status_code == 201, response.text
+        response = await client.get("/v1/orders", headers=integration_headers)
+        double_order = next(item for item in response.json()["items"] if item["id"] == double_order_id)
+        assert double_order["status"] == "EM_PESAGEM"
+        response = await client.post(
+            "/v1/stations/pesagens", headers=station_headers, json={
+                "ordem_id": double_order_id, "local_id": str(uuid.uuid4()), "etapa": "SAIDA",
+                "peso_aferido_kg": "9000.000", "peso_tara_kg": "1000.000",
+            },
+        )
+        assert response.status_code == 201, response.text
+        response = await client.get("/v1/orders", headers=integration_headers)
+        double_order = next(item for item in response.json()["items"] if item["id"] == double_order_id)
+        assert double_order["status"] == "CONCLUIDA"
 
         response = await client.get("/v1/events?status=PENDENTE", headers=integration_headers)
         assert response.status_code == 200, response.text

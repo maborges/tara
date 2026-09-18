@@ -6,7 +6,17 @@ settings:
 
 importers:
 
-  .: {}
+  .:
+    devDependencies:
+      '@eslint/js':
+        specifier: 9.39.5
+        version: 9.39.5
+      '@typescript-eslint/parser':
+        specifier: 8.68.0
+        version: 8.68.0(eslint@9.39.5(jiti@2.7.0))(typescript@5.9.3)
+      globals:
+        specifier: 14.0.0
+        version: 14.0.0
 
   backoffice:
     dependencies:

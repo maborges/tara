@@ -4,16 +4,16 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const backendUrl = getBackendOrigin();
-const standaloneService = Boolean(process.env.TARA_SERVICE_URL);
+const standaloneService = !process.env.BACKEND_URL || Boolean(process.env.TARA_SERVICE_URL);
 
 function getBackendOrigin() {
   const raw = (
     process.env.TARA_SERVICE_URL ||
     process.env.BACKEND_URL ||
     process.env.NEXT_PUBLIC_API_URL ||
-    "http://127.0.0.1:8000"
+    "http://127.0.0.1:8010"
   ).replace(/\/$/, "");
-  const value = raw.startsWith("http://") || raw.startsWith("https://") ? raw : "http://127.0.0.1:8000";
+  const value = raw.startsWith("http://") || raw.startsWith("https://") ? raw : "http://127.0.0.1:8010";
 
   if (value.endsWith("/api/v1")) {
     return value.replace(/\/api\/v1$/, "");

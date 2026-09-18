@@ -12,6 +12,12 @@ def test_portal_routes_are_versioned_and_isolated_from_backoffice():
     assert "/v1/portal/auth/register" in paths
     assert "/v1/portal/auth/login" in paths
     assert "/v1/portal/api-clients" in paths
+    assert "/v1/portal/stations" in paths
+    assert "/v1/portal/stations/{station_id}/status" in paths
+    assert "/v1/portal/operators" in paths
+    assert "/v1/portal/operators/{operator_id}/status" in paths
+    assert "/v1/portal/operators/{operator_id}/stations" in paths
+    assert "/v1/portal/stations/{station_id}/operators/{operator_id}" in paths
     assert "/v1/admin/api-clients" in paths
     assert "/v1/portal/auth/login" != "/v1/auth/login"
 

@@ -1,5 +1,3 @@
-{"timestamp":"00:00:04.845","source":"Server","level":"LOG","message":"- Experiments (use with caution):"}
-{"timestamp":"00:00:04.846","source":"Server","level":"LOG","message":"  ⨯ useTypeScriptCli"}
-{"timestamp":"00:00:04.846","source":"Server","level":"LOG","message":""}
-{"timestamp":"00:00:07.911","source":"Server","level":"LOG","message":"○ Compiling /reset-password ..."}
-{"timestamp":"00:00:16.599","source":"Server","level":"WARN","message":"⚠ Fast Refresh had to perform a full reload. Read more: https://nextjs.org/docs/messages/fast-refresh-reload"}
+{"timestamp":"00:00:01.727","source":"Server","level":"LOG","message":"- Experiments (use with caution):"}
+{"timestamp":"00:00:01.727","source":"Server","level":"LOG","message":"  ⨯ useTypeScriptCli"}
+{"timestamp":"00:00:01.727","source":"Server","level":"LOG","message":""}

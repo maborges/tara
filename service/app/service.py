@@ -2,7 +2,7 @@
 
 from .operation import (
     activate_station, complete_weighing, create_operator, create_order,
-    create_station, reconcile_weighing, register_client,
+    create_station, reconcile_weighing, register_client, update_operator_status, update_station_status,
 )
 from .platform_identity import (
     bootstrap_admin, confirm_portal_email, create_api_client, create_portal_token,

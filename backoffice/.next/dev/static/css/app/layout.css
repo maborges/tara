@@ -29,7 +29,6 @@
     --color-amber-300: oklch(87.9% 0.169 91.605);
     --color-amber-400: oklch(82.8% 0.189 84.429);
     --color-amber-500: oklch(76.9% 0.188 70.08);
-    --color-amber-600: oklch(66.6% 0.179 58.318);
     --color-amber-700: oklch(55.5% 0.163 48.998);
     --color-amber-800: oklch(47.3% 0.137 46.201);
     --color-amber-900: oklch(41.4% 0.112 45.904);
@@ -1512,9 +1511,6 @@
   .whitespace-nowrap {
     white-space: nowrap;
   }
-  .text-amber-500 {
-    color: var(--color-amber-500);
-  }
   .text-amber-700 {
     color: var(--color-amber-700);
   }
@@ -2054,9 +2050,6 @@
       .hover\:bg-accent\/60:hover {
         background-color: color-mix(in oklab, hsl(var(--accent)) 60%, transparent);
       }
-    }
-    .hover\:bg-amber-600:hover {
-      background-color: var(--color-amber-600);
     }
     .hover\:bg-destructive:hover {
       background-color: hsl(var(--destructive));
@@ -2605,9 +2598,6 @@
   @media (width >= 80rem) {
     .xl\:grid-cols-3 {
       grid-template-columns: repeat(3, minmax(0, 1fr));
-    }
-    .xl\:grid-cols-6 {
-      grid-template-columns: repeat(6, minmax(0, 1fr));
     }
   }
   .ltr\:-translate-x-1\/2:where(:dir(ltr), [dir="ltr"], [dir="ltr"] *) {

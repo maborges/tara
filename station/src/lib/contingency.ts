@@ -1,8 +1,10 @@
 import { db, getSession, type PesagemLocal } from "@/lib/db";
 
-const SCHEMA_VERSION = "balanca.contingency.v1" as const;
+const SCHEMA_VERSION = "balanca.contingency.v2" as const;
 
 interface ContingencyRecord {
+  installation_id: string | null;
+  device_configuration_id: string | null;
   local_id: string;
   ordem_id: string | null;
   subject_type: "VEICULO" | "ANIMAL" | null;
@@ -66,6 +68,8 @@ async function getIdentity() {
 
 function toRecord(item: PesagemLocal): ContingencyRecord {
   return {
+    installation_id: item.installation_id ?? null,
+    device_configuration_id: item.device_configuration_id ?? null,
     local_id: item.local_id, ordem_id: item.ordem_id, subject_type: item.subject_type,
     tipo_pesagem: item.tipo_pesagem, etapa: item.etapa, numero_ticket: item.numero_ticket,
     peso_informado_kg: item.peso_informado_kg, peso_aferido_kg: item.peso_aferido_kg ?? "0",

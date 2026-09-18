@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Activity, Ban, Check, ClipboardList, Copy, Gauge, HelpCircle, KeyRound, LogOut, Mail, Plus, RefreshCw, RotateCcw, RotateCw, Settings2, ShieldCheck, Sun, Moon, Users, Wifi } from "lucide-react";
-import { authenticate, createApiClient, formatDate, getApiClientConfiguration, getPortalDashboard, getPortalSessionPolicy, getWebhookDestination, listApiClients, listPortalOrders, listPortalUsers, listPortalWeighings, refreshSession, registerAccount, revokeApiClient, rotateApiClient, saveWebhookDestination, sendApiKeyRecoveryEmail, setWebhookStatus, testWebhookDestination, updatePortalUser, type AccountDashboard, type ApiClient, type ApiClientConfiguration, type NewCredential, type PlatformSecuritySettings, type PortalOrder, type PortalUser, type PortalWeighing, type Session, type WebhookDestination } from "@/lib/api";
+import { authenticate, createApiClient, createPortalOperator, createPortalStation, formatDate, getApiClientConfiguration, getPortalDashboard, getPortalSessionPolicy, getWebhookDestination, linkPortalOperator, listApiClients, listPortalOperators, listPortalOperatorStations, listPortalOrders, listPortalStations, listPortalUsers, listPortalWeighings, refreshSession, registerAccount, revokeApiClient, rotateApiClient, saveWebhookDestination, sendApiKeyRecoveryEmail, setWebhookStatus, testWebhookDestination, unlinkPortalOperator, updatePortalOperatorStatus, updatePortalStationStatus, updatePortalUser, resetPortalOperatorPin, type AccountDashboard, type ApiClient, type ApiClientConfiguration, type NewCredential, type PlatformSecuritySettings, type PortalOperator, type PortalOrder, type PortalStation, type PortalUser, type PortalWeighing, type Session, type WebhookDestination } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -62,7 +62,7 @@ function AuthScreen({ onAuthenticated }: { onAuthenticated: (session: Session) =
     </div>
     <Button type="submit" variant="default" className="h-9 w-full" disabled={busy}>{busy ? "Aguarde…" : mode === "login" ? "Entrar" : "Criar conta"}</Button><Button type="button" variant="link" className="mx-auto flex" onClick={() => { setMode(mode === "login" ? "register" : "login"); setError(null); }}>{mode === "login" ? "Ainda não tenho uma conta" : "Já tenho uma conta"}</Button></CardContent></form></Card></div></div>;
 }
-function Field({ label, children }: { label: string; children: React.ReactNode }) { return <div className="space-y-1.5"><Label>{label}</Label>{children}</div>; }
+function Field({ label, children, className }: { label: string; children: React.ReactNode; className?: string }) { return <div className={`space-y-1.5 ${className || ""}`}><Label>{label}</Label>{children}</div>; }
 
 function WebhookPanel({ session }: { session: Session }) {
   const [destination, setDestination] = useState<WebhookDestination | null>(null);
@@ -145,8 +145,139 @@ function PortalUsersPanel({ session }: { session: Session }) {
   return <Card><CardHeader><CardTitle>Usuários da Conta</CardTitle><CardDescription>Gerencie o perfil e o acesso das pessoas vinculadas ao Portal.</CardDescription></CardHeader><CardContent className="p-0">{loading ? <div className="p-5"><Skeleton className="h-32 w-full" /></div> : error ? <div className="p-5 text-sm text-destructive">{error}</div> : <Table><TableHeader><TableRow><TableHead>Usuário</TableHead><TableHead>Perfil</TableHead><TableHead>Status</TableHead><TableHead>Cadastro</TableHead></TableRow></TableHeader><TableBody>{users.map((user) => <TableRow key={user.id}><TableCell><strong>{user.nome_exibicao}</strong><span className="block text-xs text-muted-foreground">{user.email}</span></TableCell><TableCell><Badge variant="secondary">{user.role}</Badge></TableCell><TableCell><select value={user.status} onChange={(event) => void update(user, event.target.value)} className="h-8 rounded border bg-background px-2 text-sm"><option value="ATIVO">Ativo</option><option value="INATIVO">Inativo</option></select></TableCell><TableCell>{formatDate(user.created_at)}</TableCell></TableRow>)}{!users.length && <TableRow><TableCell colSpan={4} className="py-8 text-center text-muted-foreground">Nenhum usuário encontrado.</TableCell></TableRow>}</TableBody></Table>}</CardContent></Card>;
 }
 
+function PortalStationsPanel({ session }: { session: Session }) {
+  const [stations, setStations] = useState<PortalStation[]>([]);
+  const [externalId, setExternalId] = useState("");
+  const [name, setName] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function load() {
+    setLoading(true); setError(null);
+    try { setStations(await listPortalStations(session)); }
+    catch (cause) { setError(cause instanceof Error ? cause.message : "Falha ao carregar estações."); }
+    finally { setLoading(false); }
+  }
+  useEffect(() => { void load(); }, [session]);
+  async function create(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault(); setBusy(true); setError(null);
+    try {
+      const station = await createPortalStation(session, { external_id: externalId.trim(), nome: name.trim() });
+      setStations((current) => [...current, station].sort((left, right) => left.nome.localeCompare(right.nome)));
+      setExternalId(""); setName(""); toast.success("Estação criada. Guarde o código de ativação antes de configurá-la.");
+    } catch (cause) { setError(cause instanceof Error ? cause.message : "Falha ao criar estação."); }
+    finally { setBusy(false); }
+  }
+  async function changeStatus(station: PortalStation, status: "ATIVA" | "SUSPENSA" | "REVOGADA") {
+    if (status === "REVOGADA" && !window.confirm(`Revogar definitivamente a estação “${station.nome}”? Os tokens dela deixarão de funcionar.`)) return;
+    setBusy(true); setError(null);
+    try {
+      const updated = await updatePortalStationStatus(session, station.id, status);
+      setStations((current) => current.map((item) => item.id === updated.id ? updated : item));
+      toast.success(`Estação ${status === "ATIVA" ? "reativada" : status === "SUSPENSA" ? "suspensa" : "revogada"}.`);
+    } catch (cause) { setError(cause instanceof Error ? cause.message : "Falha ao alterar o status da estação."); }
+    finally { setBusy(false); }
+  }
+  return <div className="space-y-6">
+    <PageHeader eyebrow="Portal / Operação" title="Estações" description="Cadastre as Estações que registram Pesagens para esta Conta." actions={<Button variant="outline" size="sm" onClick={() => void load()} disabled={loading}><RefreshCw className={loading ? "animate-spin" : ""} size={14} /> Atualizar</Button>} />
+    {error && <div className="rounded-sm border border-destructive/20 bg-destructive/10 p-3 text-sm text-destructive">{error}</div>}
+    <Card><CardHeader><CardTitle>Nova Estação</CardTitle><CardDescription>O código gerado é usado uma única vez na tela de ativação da PWA da Estação.</CardDescription></CardHeader><CardContent><form className="grid gap-4 sm:grid-cols-3" onSubmit={create}><Field label="Identificador externo"><Input required value={externalId} onChange={(event) => setExternalId(event.target.value)} placeholder="balanca-01" /></Field><Field label="Nome da Estação"><Input required value={name} onChange={(event) => setName(event.target.value)} placeholder="Balança principal" /></Field><div className="flex items-end"><Button className="w-full" type="submit" disabled={busy}>{busy ? "Criando…" : "Criar Estação"}</Button></div></form></CardContent></Card>
+    <Card><CardHeader><CardTitle>Estações cadastradas</CardTitle><CardDescription>Uma Estação pendente exibe seu código de ativação até ser ativada. Suspender bloqueia temporariamente a operação; revogar é definitivo.</CardDescription></CardHeader><CardContent className="p-0">{loading ? <div className="p-5"><Skeleton className="h-32 w-full" /></div> : <Table><TableHeader><TableRow><TableHead>Estação</TableHead><TableHead>Identificador</TableHead><TableHead>Status</TableHead><TableHead>Código de ativação</TableHead><TableHead>Ações</TableHead></TableRow></TableHeader><TableBody>{stations.map((station) => <TableRow key={station.id}><TableCell className="font-medium">{station.nome}</TableCell><TableCell><code className="text-xs">{station.external_id}</code></TableCell><TableCell><Badge variant={station.status === "ATIVA" ? "success" : station.status === "REVOGADA" ? "destructive" : "secondary"}>{station.status}</Badge></TableCell><TableCell>{station.activation_code ? <code className="rounded bg-muted px-2 py-1 text-sm font-semibold tracking-wider">{station.activation_code}</code> : <span className="text-sm text-muted-foreground">—</span>}</TableCell><TableCell><div className="flex flex-wrap gap-2">{station.status === "ATIVA" && <Button type="button" variant="outline" size="sm" disabled={busy} onClick={() => void changeStatus(station, "SUSPENSA")}>Suspender</Button>}{station.status === "SUSPENSA" && <Button type="button" size="sm" disabled={busy} onClick={() => void changeStatus(station, "ATIVA")}>Reativar</Button>}{station.status !== "REVOGADA" && <Button type="button" variant="destructive" size="sm" disabled={busy} onClick={() => void changeStatus(station, "REVOGADA")}>Revogar</Button>} {station.status === "REVOGADA" && <span className="text-xs text-muted-foreground">Sem ações</span>}</div></TableCell></TableRow>)}{!stations.length && <TableRow><TableCell colSpan={5} className="py-8 text-center text-muted-foreground">Nenhuma Estação cadastrada.</TableCell></TableRow>}</TableBody></Table>}</CardContent></Card>
+  </div>;
+}
+
+function PortalOperatorsPanel({ session }: { session: Session }) {
+  const [operators, setOperators] = useState<PortalOperator[]>([]);
+  const [stations, setStations] = useState<PortalStation[]>([]);
+  const [links, setLinks] = useState<Record<string, string[]>>({});
+  const [code, setCode] = useState(""); const [externalId, setExternalId] = useState(""); const [name, setName] = useState(""); const [pin, setPin] = useState(""); const [stationIds, setStationIds] = useState<string[]>([]);
+  const [loading, setLoading] = useState(true); const [busy, setBusy] = useState(false); const [error, setError] = useState<string | null>(null);
+  const [operatorToReset, setOperatorToReset] = useState<PortalOperator | null>(null);
+  const [resetPinValue, setResetPinValue] = useState("");
+  async function load() {
+    setLoading(true); setError(null);
+    try {
+      const [nextOperators, nextStations] = await Promise.all([listPortalOperators(session), listPortalStations(session)]);
+      setOperators(nextOperators); setStations(nextStations);
+      const values = await Promise.all(nextOperators.map(async (operator) => [operator.id, await listPortalOperatorStations(session, operator.id)] as const));
+      setLinks(Object.fromEntries(values));
+    } catch (cause) { setError(cause instanceof Error ? cause.message : "Falha ao carregar operadores."); }
+    finally { setLoading(false); }
+  }
+  useEffect(() => { void load(); }, [session]);
+  async function create(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault(); setBusy(true); setError(null);
+    try {
+      const operator = await createPortalOperator(session, { codigo: code.trim(), identificador_externo: externalId.trim(), nome_exibicao: name.trim(), pessoa_ref: null, senha_inicial: pin });
+      await Promise.all(stationIds.map((stationId) => linkPortalOperator(session, stationId, operator.id)));
+      setCode(""); setExternalId(""); setName(""); setPin(""); setStationIds([]);
+      toast.success("Operador cadastrado e pronto para ser usado na Estação."); await load();
+    } catch (cause) { setError(cause instanceof Error ? cause.message : "Falha ao cadastrar operador."); }
+    finally { setBusy(false); }
+  }
+  async function link(operatorId: string, targetStationId: string) {
+    if (!targetStationId) return;
+    try { await linkPortalOperator(session, targetStationId, operatorId); setLinks((current) => ({ ...current, [operatorId]: Array.from(new Set([...(current[operatorId] || []), targetStationId])) })); toast.success("Operador vinculado à Estação."); }
+    catch (cause) { setError(cause instanceof Error ? cause.message : "Falha ao vincular operador."); }
+  }
+  async function unlink(operatorId: string, targetStationId: string) {
+    try { await unlinkPortalOperator(session, targetStationId, operatorId); setLinks((current) => ({ ...current, [operatorId]: (current[operatorId] || []).filter((id) => id !== targetStationId) })); toast.success("Vínculo removido."); }
+    catch (cause) { setError(cause instanceof Error ? cause.message : "Falha ao remover vínculo."); }
+  }
+  async function changeStatus(operator: PortalOperator, status: "ATIVO" | "INATIVO") {
+    setBusy(true); setError(null);
+    try {
+      const updated = await updatePortalOperatorStatus(session, operator.id, status);
+      setOperators((current) => current.map((item) => item.id === updated.id ? updated : item));
+      toast.success(`Operador ${status === "ATIVO" ? "reativado" : "inativado"}.`);
+    } catch (cause) { setError(cause instanceof Error ? cause.message : "Falha ao alterar o status do operador."); }
+    finally { setBusy(false); }
+  }
+  async function submitResetPin(e: React.FormEvent) {
+    e.preventDefault();
+    if (!operatorToReset) return;
+    if (resetPinValue.length < 4) {
+      toast.error("O PIN deve ter pelo menos 4 dígitos.");
+      return;
+    }
+    setBusy(true); setError(null);
+    try {
+      await resetPortalOperatorPin(session, operatorToReset.id, resetPinValue);
+      toast.success(`PIN redefinido com sucesso para ${operatorToReset.nome_exibicao}.`);
+      setOperatorToReset(null);
+      setResetPinValue("");
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Falha ao redefinir o PIN.");
+    } finally {
+      setBusy(false);
+    }
+  }
+  const stationName = (id: string) => stations.find((station) => station.id === id)?.nome || id;
+  return <div className="space-y-6">
+    <PageHeader eyebrow="Portal / Operação" title="Operadores" description="Cadastre as pessoas que realizam Pesagens e autorize cada uma nas Estações adequadas." actions={<Button variant="outline" size="sm" onClick={() => void load()} disabled={loading}><RefreshCw className={loading ? "animate-spin" : ""} size={14} /> Atualizar</Button>} />
+    {error && <div className="rounded-sm border border-destructive/20 bg-destructive/10 p-3 text-sm text-destructive">{error}</div>}
+    <Card><CardHeader><CardTitle>Novo Operador</CardTitle><CardDescription>O PIN é pessoal e será solicitado na Estação antes de registrar uma Pesagem. O identificador externo é normalizado em maiúsculas e deve ser único na Conta.</CardDescription></CardHeader><CardContent><form className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4" onSubmit={create}><Field label="Código"><Input required value={code} onChange={(event) => setCode(event.target.value)} placeholder="OP-001" /></Field><Field label="Identificador externo"><Input required value={externalId} onChange={(event) => setExternalId(event.target.value)} placeholder="MATRICULA-001" /></Field><Field label="Nome"><Input required value={name} onChange={(event) => setName(event.target.value)} placeholder="Nome do operador" /></Field><Field label="PIN inicial"><Input required minLength={4} type="password" inputMode="numeric" value={pin} onChange={(event) => setPin(event.target.value)} placeholder="••••" /></Field><Field label="Estações autorizadas" className="sm:col-span-2 lg:col-span-4"><div className="max-h-28 space-y-1 overflow-auto rounded-sm border p-2">{stations.length ? stations.map((station) => <label key={station.id} className="flex cursor-pointer items-center gap-2 text-sm"><input type="checkbox" checked={stationIds.includes(station.id)} onChange={(event) => setStationIds((current) => event.target.checked ? [...current, station.id] : current.filter((id) => id !== station.id))} />{station.nome}</label>) : <span className="text-sm text-muted-foreground">Cadastre uma Estação primeiro ou faça o vínculo depois.</span>}</div></Field><div className="sm:col-span-2 lg:col-span-4"><Button type="submit" disabled={busy}>{busy ? "Cadastrando…" : "Cadastrar Operador"}</Button></div></form></CardContent></Card>
+    <Card><CardHeader><CardTitle>Operadores cadastrados</CardTitle><CardDescription>Inativar bloqueia o login imediatamente, preservando os vínculos e o histórico para uma futura reativação.</CardDescription></CardHeader><CardContent className="p-0">{loading ? <div className="p-5"><Skeleton className="h-32 w-full" /></div> : <Table><TableHeader><TableRow><TableHead>Operador</TableHead><TableHead>Identificadores</TableHead><TableHead>Estações autorizadas</TableHead><TableHead>Vincular Estação</TableHead><TableHead>Ações</TableHead></TableRow></TableHeader><TableBody>{operators.map((operator) => <TableRow key={operator.id}><TableCell><strong className="block">{operator.nome_exibicao}</strong><Badge variant={operator.status === "ATIVO" ? "success" : operator.status === "REVOGADO" ? "destructive" : "secondary"}>{operator.status}</Badge></TableCell><TableCell><code className="block text-xs">{operator.codigo}</code><span className="text-xs text-muted-foreground">{operator.identificador_externo || "—"}</span></TableCell><TableCell><div className="flex flex-wrap gap-1">{(links[operator.id] || []).map((id) => <span className="inline-flex items-center gap-1 rounded bg-muted px-2 py-1 text-xs" key={id}>{stationName(id)}<button type="button" className="font-bold text-muted-foreground hover:text-destructive" title="Remover vínculo" onClick={() => void unlink(operator.id, id)}>×</button></span>)}{!(links[operator.id] || []).length && <span className="text-xs text-muted-foreground">Sem Estação</span>}</div></TableCell><TableCell><select aria-label={`Vincular ${operator.nome_exibicao} a uma Estação`} defaultValue="" disabled={operator.status !== "ATIVO"} onChange={(event) => { void link(operator.id, event.target.value); event.currentTarget.value = ""; }} className="h-8 max-w-48 rounded border bg-background px-2 text-sm"><option value="">Selecionar Estação</option>{stations.filter((station) => !(links[operator.id] || []).includes(station.id)).map((station) => <option key={station.id} value={station.id}>{station.nome}</option>)}</select></TableCell><TableCell><div className="flex gap-2">{operator.status === "ATIVO" && <Button type="button" variant="outline" size="sm" disabled={busy} onClick={() => setOperatorToReset(operator)}>Reset PIN</Button>}{operator.status === "ATIVO" && <Button type="button" variant="outline" size="sm" disabled={busy} onClick={() => void changeStatus(operator, "INATIVO")}>Inativar</Button>}{operator.status === "INATIVO" && <Button type="button" size="sm" disabled={busy} onClick={() => void changeStatus(operator, "ATIVO")}>Reativar</Button>}{operator.status === "REVOGADO" && <span className="text-xs text-muted-foreground">Revogado</span>}</div></TableCell></TableRow>)}{!operators.length && <TableRow><TableCell colSpan={5} className="py-8 text-center text-muted-foreground">Nenhum Operador cadastrado.</TableCell></TableRow>}</TableBody></Table>}</CardContent></Card>
+    {operatorToReset && (
+      <Dialog title={`Reset PIN - ${operatorToReset.nome_exibicao}`} onClose={() => { setOperatorToReset(null); setResetPinValue(""); }}>
+        <form onSubmit={submitResetPin} className="mt-4 space-y-4">
+          <div className="space-y-1">
+            <Label htmlFor="new-pin">Novo PIN numérico</Label>
+            <Input id="new-pin" type="password" inputMode="numeric" minLength={4} required value={resetPinValue} onChange={(e) => setResetPinValue(e.target.value)} placeholder="••••" />
+          </div>
+          <div className="flex justify-end gap-2">
+            <Button type="button" variant="outline" disabled={busy} onClick={() => { setOperatorToReset(null); setResetPinValue(""); }}>Cancelar</Button>
+            <Button type="submit" disabled={busy}>{busy ? "Salvando..." : "Salvar PIN"}</Button>
+          </div>
+        </form>
+      </Dialog>
+    )}
+  </div>;
+}
+
 function Dashboard({ session, onSignOut }: { session: Session; onSignOut: () => void }) {
-  const [view, setView] = useState<"overview" | "api-keys" | "webhook" | "atividade" | "usuarios">("overview"); const [clients, setClients] = useState<ApiClient[]>([]); const [dashboard, setDashboard] = useState<AccountDashboard | null>(null); const [policy, setPolicy] = useState<PlatformSecuritySettings>({ session_minutes: 30, idle_minutes: 120, refresh_enabled: true, warning_minutes: 5 }); const [credential, setCredential] = useState<NewCredential | null>(null); const [configurationClient, setConfigurationClient] = useState<ApiClient | null>(null); const [error, setError] = useState<string | null>(null); const [loading, setLoading] = useState(true); const [showForm, setShowForm] = useState(false); const [dark, setDark] = useState(false);
+  const [view, setView] = useState<"overview" | "api-keys" | "webhook" | "atividade" | "estacoes" | "operadores" | "usuarios">("overview"); const [clients, setClients] = useState<ApiClient[]>([]); const [dashboard, setDashboard] = useState<AccountDashboard | null>(null); const [policy, setPolicy] = useState<PlatformSecuritySettings>({ session_minutes: 30, idle_minutes: 120, refresh_enabled: true, warning_minutes: 5 }); const [credential, setCredential] = useState<NewCredential | null>(null); const [configurationClient, setConfigurationClient] = useState<ApiClient | null>(null); const [error, setError] = useState<string | null>(null); const [loading, setLoading] = useState(true); const [showForm, setShowForm] = useState(false); const [dark, setDark] = useState(false);
   async function load() { setLoading(true); setError(null); try { const [nextClients, nextDashboard] = await Promise.all([listApiClients(session), getPortalDashboard(session)]); setClients(nextClients); setDashboard(nextDashboard); } catch (cause) { setError(cause instanceof Error ? cause.message : "Falha ao carregar o resumo da Conta."); } finally { setLoading(false); } }
   useEffect(() => { void load(); }, []);
   useEffect(() => { void getPortalSessionPolicy(session).then(setPolicy).catch(() => undefined); }, [session]);
@@ -214,6 +345,16 @@ function Dashboard({ session, onSignOut }: { session: Session; onSignOut: () => 
                     </SidebarMenuButton>
                   </SidebarMenuItem>
                   <SidebarMenuItem>
+                    <SidebarMenuButton isActive={view === "estacoes"} tooltip="Estações" onClick={() => setView("estacoes")}>
+                      <Wifi /> <span>Estações</span>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                  <SidebarMenuItem>
+                    <SidebarMenuButton isActive={view === "operadores"} tooltip="Operadores" onClick={() => setView("operadores")}>
+                      <Users /> <span>Operadores</span>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                  <SidebarMenuItem>
                     <SidebarMenuButton isActive={view === "usuarios"} tooltip="Usuários" onClick={() => setView("usuarios")}>
                       <UserRound /> <span>Usuários</span>
                     </SidebarMenuButton>
@@ -263,6 +404,8 @@ function Dashboard({ session, onSignOut }: { session: Session; onSignOut: () => 
               </div>
             )}
             {view === "atividade" && <PortalProcessesPanel session={session} />}
+            {view === "estacoes" && <PortalStationsPanel session={session} />}
+            {view === "operadores" && <PortalOperatorsPanel session={session} />}
             {view === "webhook" && <WebhookPanel session={session} />}
             {view === "usuarios" && (
               <div className="space-y-6">

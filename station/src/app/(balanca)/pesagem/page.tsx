@@ -124,7 +124,7 @@ export default function PesagemPage() {
   if (!mounted || !session || ordens === undefined) return null;
 
   if (!operadorSessao) {
-    return <OperadorLogin deviceId={session.device_id} onLogin={() => {}} />;
+    return <OperadorLogin deviceId={session.device_id} onLogin={() => window.location.reload()} />;
   }
 
   const emCaptura = !!ordemSelecionada || !!avulsaConfig;
@@ -211,9 +211,21 @@ export default function PesagemPage() {
     const informadoNum = pesoInformado ? Number(pesoInformado.replace(",", ".")) : aferidoNum;
 
     try {
+      const nowIso = new Date().toISOString();
+      const auth = await db.offline_auths.where("expires_at").above(nowIso).first();
+      if (!auth) {
+        setMensagem("Sem autorizações de captura offline disponíveis. Conecte-se à internet para sincronizar e reabastecer a estação.");
+        setSalvando(false);
+        return;
+      }
+
       const localId = crypto.randomUUID();
       await db.pesagens.add({
         local_id: localId,
+        authorization_id: auth.id,
+        authorization_nonce: auth.nonce,
+        installation_id: session?.installation_id ?? null,
+        device_configuration_id: session?.device_configuration_id ?? null,
         ordem_id: ordemSelecionada?.id ?? null,
         subject_type: ordemSelecionada ? null : avulsaConfig!.subject_type,
         tipo_pesagem: ordemSelecionada ? null : "UNICA",
@@ -224,7 +236,9 @@ export default function PesagemPage() {
         peso_aferido_kg: aferidoNum.toFixed(3),
         peso_tara_kg: "0.000",
         captured_via: capturedVia,
+        operador_id: operadorSessao?.operador_id ?? null,
         leitura_bruta: leituraBrutaUsada,
+        contexto: {},
         placa: placa || null,
         motorista: null,
         animal_id: animalSelecionado?.id ?? null,
@@ -235,6 +249,7 @@ export default function PesagemPage() {
         client_updated_at: agora,
         synced: 0,
       });
+      await db.offline_auths.delete(auth.id);
       await enqueuePesagem(localId);
 
       if (ordemSelecionada) {

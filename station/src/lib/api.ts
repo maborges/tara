@@ -64,17 +64,20 @@ export async function ativarDispositivo(params: {
   pin_hash: string;
   device_fingerprint: string;
 }) {
-  return apiFetch<{
-    device_token: string;
-    device_id: string;
+  const result = await apiFetch<{
+    station_token: string;
+    station_id: string;
     tenant_id: string;
     nome: string;
-    fazenda_ids: string[];
-    expires_at: string;
+    expires_at: string | null;
     recovery_secret?: string;
+    installation_id: string | null;
+    device_configuration_id: string | null;
   }>(
     "/api/v1/balanca/devices/activate",
     { method: "POST", body: JSON.stringify(params) },
     false,
   );
+  return { ...result, device_id: result.station_id, device_token: result.station_token,
+    fazenda_ids: [], expires_at: result.expires_at ?? "" };
 }

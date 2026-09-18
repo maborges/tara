@@ -18,21 +18,40 @@ async def lifespan(app: FastAPI):
     await dispose_engine()
 
 
-app = FastAPI(
+api = FastAPI(
     title="Balança Service",
     version=get_settings().service_version,
     description="Serviço independente de pesagem e conciliação do AgroSaaS.",
     lifespan=lifespan,
 )
-app.include_router(router)
-app.include_router(portal_router)
-app.include_router(platform_router)
+api.include_router(router)
+api.include_router(portal_router)
+api.include_router(platform_router)
 
-app.add_middleware(
-    CORSMiddleware,
+
+@api.get("/healthz", tags=["Operação"])
+async def healthz():
+    return {"status": "ok", "service": get_settings().service_name}
+
+
+@api.get("/readyz", tags=["Operação"])
+async def readyz():
+    try:
+        async with _engine.connect() as connection:
+            await connection.execute(text("select 1"))
+    except Exception as exc:
+        return JSONResponse(status_code=503, content={"status": "not_ready", "detail": str(exc)})
+    return {"status": "ready"}
+
+
+# Keep CORS outside FastAPI's error middleware too. Without this wrapper, an
+# unexpected API error is returned by the outer error handler before the usual
+# CORS middleware can add its headers, and browsers hide the useful response.
+app = CORSMiddleware(
+    app=api,
     allow_origins=get_settings().cors_origins,
     allow_credentials=False,
-    allow_methods=["GET", "POST", "PUT", "OPTIONS"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=[
         "Authorization",
         "Content-Type",
@@ -42,17 +61,6 @@ app.add_middleware(
     ],
 )
 
-
-@app.get("/healthz", tags=["Operação"])
-async def healthz():
-    return {"status": "ok", "service": get_settings().service_name}
-
-
-@app.get("/readyz", tags=["Operação"])
-async def readyz():
-    try:
-        async with _engine.connect() as connection:
-            await connection.execute(text("select 1"))
-    except Exception as exc:
-        return JSONResponse(status_code=503, content={"status": "not_ready", "detail": str(exc)})
-    return {"status": "ready"}
+# Preserve the schema access used by contract tests and local tooling while
+# `app` remains the ASGI entry point consumed by Uvicorn.
+app.openapi = api.openapi

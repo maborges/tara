@@ -16,7 +16,7 @@ async def get_session() -> AsyncIterator[AsyncSession]:
 
 async def set_tenant_context(session: AsyncSession, tenant_id: str) -> None:
     await session.execute(
-        text("select set_config('app.current_tenant_id', :tenant_id, false)"),
+        text("select set_config('app.current_tenant_id', :tenant_id, true)"),
         {"tenant_id": tenant_id},
     )
 
@@ -43,7 +43,7 @@ async def clear_auth_lookup_context(session: AsyncSession, setting: str) -> None
 async def set_platform_admin_context(session: AsyncSession, admin_user_id: str) -> None:
     """Marca a identidade global autenticada para as políticas RLS da plataforma."""
     await session.execute(
-        text("select set_config('app.platform_admin_id', :admin_user_id, false)"),
+        text("select set_config('app.platform_admin_id', :admin_user_id, true)"),
         {"admin_user_id": admin_user_id},
     )
 

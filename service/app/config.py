@@ -23,6 +23,7 @@ class Settings(BaseSettings):
         "http://localhost:3005", "http://127.0.0.1:3005",
     ]
     outbox_tenant_id: str | None = None
+    outbox_tenant_ids: str | None = None
     outbox_target_url: str | None = None
     outbox_target_api_key: str | None = None
     outbox_account_destinations_json: str | None = None
@@ -57,6 +58,11 @@ class Settings(BaseSettings):
         if self.outbox_target_url and self.outbox_target_api_key:
             return self.outbox_target_url, self.outbox_target_api_key
         return None
+
+    def worker_tenant_ids(self) -> list[str]:
+        """Return the configured tenants for an outbox worker, without bypassing RLS."""
+        values = self.outbox_tenant_ids or self.outbox_tenant_id or ""
+        return [value.strip() for value in values.split(",") if value.strip()]
 
 
 @lru_cache

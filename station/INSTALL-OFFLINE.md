@@ -8,9 +8,9 @@ internet.
 
 ## Procedimento operacional
 
-1. No computador de empacotamento, execute `pnpm package:offline`.
-2. Copie o diretório gerado para a estação por pendrive ou rede local.
-3. Instale/atualize a aplicação usando o `INSTALL.txt` do pacote.
+1. No computador de empacotamento, execute `pnpm station:package` na raiz do projeto.
+2. Copie o arquivo `.tar.gz` gerado em `station/dist/` para a estação por pendrive ou rede local.
+3. Extraia o arquivo e execute `sudo ./install.sh`; o instalador preserva `.env.local` em atualizações.
 4. Com a rede disponível, abrir a URL publicada da estação e ativar o terminal.
 5. Aguardar a primeira sincronização e confirmar que os operadores e ordens
    do terminal aparecem no cache local.

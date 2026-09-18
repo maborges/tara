@@ -25,7 +25,7 @@ async def import_contingency_package(session: AsyncSession, tenant_id: uuid.UUID
     Raises:
         ValueError: Se identidade, assinatura, estação ou sequência forem inválidas.
     """
-    raw = package.model_dump(mode="json")
+    raw = package.model_dump(mode="json", exclude_unset=True)
     fingerprint = verify_package_signature(raw)
     station = await _find_station(session, tenant_id, package.station_id)
     _validate_station_identity(station, package, fingerprint)
@@ -84,12 +84,23 @@ async def _import_items(session, tenant_id, lot_id, station_id, records):
 
 
 async def _import_item(session, tenant_id, lot_id, station_id, record):
+    if record.installation_id:
+        from .models import EstacaoInstalacao
+        inst = (await session.execute(select(EstacaoInstalacao).where(EstacaoInstalacao.id == record.installation_id, EstacaoInstalacao.tenant_id == tenant_id))).scalar_one_or_none()
+        if not inst or inst.estacao_id != station_id:
+            return _save_item(session, tenant_id, lot_id, record, "REJEITADO", None, "Instalação não pertence à estação indicada")
+    if record.device_configuration_id:
+        from .models import DeviceConfiguration
+        dev = (await session.execute(select(DeviceConfiguration).where(DeviceConfiguration.id == record.device_configuration_id, DeviceConfiguration.tenant_id == tenant_id))).scalar_one_or_none()
+        if not dev or dev.instalacao_id != record.installation_id:
+            return _save_item(session, tenant_id, lot_id, record, "REJEITADO", None, "Configuração de dispositivo não pertence à instalação indicada")
+
     duplicate = (await session.execute(select(Pesagem).where(Pesagem.tenant_id == tenant_id, Pesagem.local_id == record.local_id))).scalar_one_or_none()
     if duplicate:
         return _save_item(session, tenant_id, lot_id, record, "DUPLICADO", duplicate.id)
     try:
         order_id = record.ordem_id or await _create_shadow_order(session, tenant_id, record)
-        weight = await complete_weighing(session, tenant_id, WeighingIn(estacao_id=station_id, ordem_id=order_id, local_id=record.local_id, etapa=record.etapa, peso_aferido_kg=Decimal(record.peso_aferido_kg), peso_informado_kg=_decimal(record.peso_informado_kg), peso_tara_kg=_decimal(record.peso_tara_kg), captured_via=record.captured_via, leitura_bruta=record.leitura_bruta, captured_at=_naive_datetime(record.data_pesagem)))
+        weight = await complete_weighing(session, tenant_id, WeighingIn(estacao_id=station_id, installation_id=record.installation_id, device_configuration_id=record.device_configuration_id, ordem_id=order_id, local_id=record.local_id, etapa=record.etapa, peso_aferido_kg=Decimal(record.peso_aferido_kg), peso_informado_kg=_decimal(record.peso_informado_kg), peso_tara_kg=_decimal(record.peso_tara_kg), captured_via=record.captured_via, leitura_bruta=record.leitura_bruta, captured_at=_naive_datetime(record.data_pesagem)))
         return _save_item(session, tenant_id, lot_id, record, "IMPORTADO", weight.id)
     except (ValueError, KeyError) as exc:
         return _save_item(session, tenant_id, lot_id, record, "REJEITADO", None, str(exc))

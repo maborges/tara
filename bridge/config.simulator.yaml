@@ -1,0 +1,21 @@
+# Configuração local de teste: lê o simulador TCP em vez de um indicador físico.
+# Execute a Bridge com TARA_BRIDGE_CONFIG=config.simulator.yaml.
+connection_type: TCP
+
+tcp:
+  host: 127.0.0.1
+  port: 4001
+  timeout: 5.0
+  reconnect_seconds: 3.0
+
+protocol:
+  weight_regex: '[-+]?\d+(?:[.,]\d+)?'
+  decimal_separator: "."
+  unit: kg
+  scale_factor: 1.0
+  line_terminator: "\r\n"
+
+http_host: 127.0.0.1
+http_port: 8322
+stale_after_seconds: 5.0
+api_token: null

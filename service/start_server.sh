@@ -13,4 +13,4 @@ fi
 cd "${SERVICE_DIR}"
 exec "${PYTHON_BIN}" -m uvicorn app.main:app \
   --host "${TARA_HOST:-0.0.0.0}" \
-  --port "${TARA__PORT:-8010}"
+  --port "${TARA_PORT:-8010}"

@@ -50,6 +50,8 @@ async def test_avulsa_sync_query_and_reconciliation_flow():
             json={"activation_code": station.json()["activation_code"]},
         )
         assert activation.status_code == 200, activation.text
+        installation_id = activation.json()["installation_id"]
+        device_configuration_id = activation.json()["device_configuration_id"]
         station_headers = {
             "Authorization": f"Bearer {activation.json()['station_token']}",
         }
@@ -59,6 +61,8 @@ async def test_avulsa_sync_query_and_reconciliation_flow():
             "/v1/stations/sync/push", headers=station_headers,
             json={"items": [{"local_id": capture_id, "payload": {
                 "ordem_id": None,
+                "installation_id": installation_id,
+                "device_configuration_id": device_configuration_id,
                 "etapa": "UNICA",
                 "peso_aferido_kg": "12000.000",
                 "peso_tara_kg": "1000.000",
@@ -80,6 +84,8 @@ async def test_avulsa_sync_query_and_reconciliation_flow():
             "/v1/stations/sync/push", headers=station_headers,
             json={"items": [{"local_id": str(uuid.uuid4()), "payload": {
                 "ordem_id": None, "etapa": "UNICA", "peso_aferido_kg": "8000.000",
+                "installation_id": installation_id,
+                "device_configuration_id": device_configuration_id,
                 "peso_tara_kg": "500.000", "captured_via": "MANUAL",
                 "direcao_veiculo": "SAIDA", "natureza_mercadoria": "SAIDA",
                 "tipo_operacao": "EXPEDICAO", "contexto": {"cfop": "5101"},

@@ -19,10 +19,14 @@ def test_completed_weighing_outbox_contains_public_envelope_and_routing_fields()
         natureza_mercadoria="GRAOS", tipo_operacao="COMPRA",
     )
 
-    outbox = build_completed_weighing_outbox(weight, None, data, account_id)
+    result = (Decimal("1500"), Decimal("500"), Decimal("1000"), "CLIENT_PROVIDED")
+    outbox = build_completed_weighing_outbox(weight, None, data, account_id, result=result)
 
     assert outbox.tenant_id == tenant_id
     assert outbox.conta_id == account_id
     assert outbox.event_type == "balanca.pesagem.concluida.v1"
+    assert outbox.payload["payload"]["peso_bruto_kg"] == "1500"
+    assert outbox.payload["payload"]["peso_tara_kg"] == "500"
     assert outbox.payload["payload"]["peso_liquido_kg"] == "1000"
+    assert outbox.payload["payload"]["tara_source"] == "CLIENT_PROVIDED"
     assert outbox.payload["idempotency_key"] == "capture:capture-1"

@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Any, Literal
 import uuid
@@ -146,6 +146,53 @@ class PortalResetTokenOut(BaseModel):
     mensagem: str | None = None
 
 
+class DeviceConfigurationIn(BaseModel):
+    installation_id: uuid.UUID
+    bridge_url: str | None = None
+    validation_id: uuid.UUID | None = None
+
+
+class BridgeChallengeIn(BaseModel):
+    device_configuration_id: uuid.UUID
+
+
+class BridgeChallengeOut(BaseModel):
+    challenge_id: uuid.UUID
+    nonce: str
+
+
+class BridgeValidationIn(BaseModel):
+    bridge_url: str
+    challenge_id: uuid.UUID
+    bridge_token_proof: str = Field(min_length=1, max_length=500)
+    peso_kg: Decimal
+
+
+class BridgeValidationOut(BaseModel):
+    validation_id: uuid.UUID
+
+
+class BridgeTestOut(BaseModel):
+    reachable: bool
+    healthy: bool
+    peso_kg: Decimal | None = None
+    stable: bool | None = None
+
+
+class StationInstallationOut(BaseModel):
+    station_id: uuid.UUID
+    installation_id: uuid.UUID | None = None
+    activation_code: str
+
+
+class DeviceConfigurationOut(BaseModel):
+    id: uuid.UUID
+    installation_id: uuid.UUID
+    bridge_url: str | None = None
+    status: str | None = None
+    bridge_proof_key: str | None = None
+
+
 class PortalForgotPasswordIn(BaseModel):
     email: str = Field(min_length=5, max_length=255)
 
@@ -290,10 +337,12 @@ class ContingencyRecordIn(BaseModel):
     leitura_bruta: dict[str, Any] | None = None
     data_pesagem: datetime | None = None
     contexto: dict[str, Any] = Field(default_factory=dict)
+    installation_id: uuid.UUID | None = None
+    device_configuration_id: uuid.UUID | None = None
 
 
 class ContingencyPackageIn(BaseModel):
-    schema_version: Literal["balanca.contingency.v1"]
+    schema_version: Literal["balanca.contingency.v1", "balanca.contingency.v2"]
     package_id: str = Field(min_length=1, max_length=120)
     sequence_number: int = Field(gt=0)
     tenant_id: uuid.UUID
@@ -325,7 +374,12 @@ class OrderIn(BaseModel):
     external_reference: str = Field(min_length=1, max_length=180)
     correlation_id: str = Field(min_length=1, max_length=120)
     subject_type: Literal["VEICULO", "ANIMAL"]
-    tipo_pesagem: str = Field(min_length=1, max_length=30)
+    tipo_pesagem: Literal[
+        "UNICA",
+        "DUPLA",
+        "DUPLA_ENTRADA_DESCARGA",
+        "DUPLA_SAIDA_CARREGAMENTO",
+    ]
     contexto: dict[str, Any] = Field(default_factory=dict)
 
 
@@ -340,6 +394,10 @@ class OrderOut(BaseModel):
     tipo_pesagem: str
     contexto: dict[str, Any]
     status: str
+    # Resultado físico da operação (migration 033).
+    peso_bruto_kg: Decimal | None
+    peso_tara_kg: Decimal | None
+    tara_source: str | None
     peso_liquido_kg: Decimal | None
     created_at: datetime
     concluida_em: datetime | None
@@ -367,6 +425,10 @@ class StationOut(BaseModel):
     status: str
 
 
+class StationStatusUpdateIn(BaseModel):
+    status: Literal["ATIVA", "SUSPENSA", "REVOGADA"]
+
+
 class ActivationIn(BaseModel):
     activation_code: str = Field(min_length=8, max_length=12)
 
@@ -374,8 +436,12 @@ class ActivationIn(BaseModel):
 class ActivationOut(BaseModel):
     station_id: uuid.UUID
     station_token: str
+    tenant_id: uuid.UUID
+    nome: str
     expires_at: datetime | None = None
     recovery_secret: str | None = None
+    installation_id: uuid.UUID | None = None
+    device_configuration_id: uuid.UUID | None = None
 
 
 class OperatorIn(BaseModel):
@@ -405,6 +471,22 @@ class PortalOperatorIn(BaseModel):
     pessoa_ref: str | None = Field(default=None, max_length=120)
     senha_inicial: str = Field(min_length=4, max_length=128)
 
+    @field_validator("identificador_externo")
+    @classmethod
+    def normalize_external_identifier(cls, value: str) -> str:
+        value = value.strip().upper()
+        if not value:
+            raise ValueError("Identificador externo não pode ser vazio")
+        return value
+
+
+class OperatorStatusUpdateIn(BaseModel):
+    status: Literal["ATIVO", "INATIVO"]
+
+
+class OperatorResetPinIn(BaseModel):
+    novo_pin: str = Field(min_length=4, max_length=128)
+
 
 class StationRecoveryOut(BaseModel):
     station_id: uuid.UUID
@@ -433,6 +515,8 @@ class StationProvisioningOut(BaseModel):
 
 class WeighingIn(BaseModel):
     estacao_id: uuid.UUID | None = None
+    installation_id: uuid.UUID | None = None
+    device_configuration_id: uuid.UUID | None = None
     ordem_id: uuid.UUID | None = None
     client_system: str | None = Field(default=None, min_length=1, max_length=80)
     client_tenant_id: str | None = Field(default=None, min_length=1, max_length=120)
@@ -451,6 +535,11 @@ class WeighingIn(BaseModel):
     natureza_mercadoria: Literal["ENTRADA", "SAIDA", "NEUTRA"] | None = None
     tipo_operacao: str | None = Field(default=None, max_length=60)
     contexto: dict[str, Any] = Field(default_factory=dict)
+
+    @field_validator("captured_at")
+    @classmethod
+    def utc_capture(cls, value):
+        return value.astimezone(timezone.utc).replace(tzinfo=None) if value and value.tzinfo else value
 
 
 class WeighingOut(BaseModel):
@@ -511,7 +600,25 @@ class EventReplayAuditOut(BaseModel):
 
 class SyncItemIn(BaseModel):
     local_id: str
+    signature: str | None = None
+    authorization_id: uuid.UUID | None = None
+    authorization_nonce: str | None = None
     payload: dict[str, Any] = Field(default_factory=dict)
+
+
+class OfflineCaptureAuthorizationOut(BaseModel):
+    id: uuid.UUID
+    nonce: str
+    expires_at: datetime
+
+
+class OfflineCaptureAuthorizationReplenishIn(BaseModel):
+    device_configuration_id: uuid.UUID
+    count: int = Field(default=50, ge=1, le=100)
+
+
+class OfflineCaptureAuthorizationReplenishOut(BaseModel):
+    items: list[OfflineCaptureAuthorizationOut]
 
 
 class SyncPushIn(BaseModel):

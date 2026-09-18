@@ -1,12 +1,22 @@
 [
   "tests/test_avulsa_e2e.py::test_avulsa_sync_query_and_reconciliation_flow",
+  "tests/test_block_01f.py::test_block_01_replaced_station_online_barriers",
+  "tests/test_block_01f.py::test_block_02_bridge_validation_without_backend_http",
+  "tests/test_block_01f.py::test_block_03_contingency_v2_validation",
+  "tests/test_block_01k.py::test_block_01_and_02_e2e",
   "tests/test_contingency_import.py::test_import_contingency_is_signed_idempotent_and_tenant_scoped",
   "tests/test_delivery_contract.py::test_canonical_json_does_not_depend_on_dictionary_insertion_order",
   "tests/test_delivery_contract.py::test_delivery_body_is_canonical_and_signature_covers_exact_request",
+  "tests/test_delivery_contract.py::test_worker_accepts_multiple_configured_tenants_without_bypassing_rls",
   "tests/test_outbox_delivery.py::test_file_adapter_is_hidden_behind_outbox_delivery",
   "tests/test_platform_accounts.py::test_platform_admin_lists_accounts_across_tenants",
   "tests/test_portal_contract.py::test_portal_registration_requires_account_owner_credentials",
   "tests/test_portal_contract.py::test_portal_routes_are_versioned_and_isolated_from_backoffice",
   "tests/test_service_e2e.py::test_standalone_service_order_station_weighing_observer_flow",
+  "tests/test_weighing_calculation.py::test_weighing_anomalies_and_semantics",
+  "tests/test_weighing_calculation.py::test_weighing_dupla_entrada_descarga_recebimento",
+  "tests/test_weighing_calculation.py::test_weighing_dupla_saida_carregamento_expedicao",
+  "tests/test_weighing_calculation.py::test_weighing_etapa_invalida_rejeitada",
+  "tests/test_weighing_calculation.py::test_weighing_unica_com_tara_fornecida",
   "tests/test_weighing_events.py::test_completed_weighing_outbox_contains_public_envelope_and_routing_fields"
 ]

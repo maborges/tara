@@ -41,6 +41,13 @@ export interface OrdemPendenteLocal {
 }
 
 export interface PesagemLocal {
+  operador_id?: string | null;
+  device_configuration_id?: string | null;
+  installation_id?: string | null;
+  direcao_veiculo?: "ENTRADA" | "SAIDA" | null;
+  natureza_mercadoria?: "ENTRADA" | "SAIDA" | "NEUTRA" | null;
+  tipo_operacao?: string | null;
+  contexto?: Record<string, unknown>;
   local_id: string; // UUID gerado no dispositivo — chave de idempotência do sync
   // null = pesagem avulsa (sem ordem prévia do módulo cliente): a estação cria
   // uma ordem "sombra" no servidor durante o sync push, ver lib/sync/push.ts.
@@ -68,6 +75,8 @@ export interface PesagemLocal {
   client_created_at: string;
   client_updated_at: string;
   synced: 0 | 1; // Dexie não indexa booleans — usar 0/1
+  authorization_id?: string | null;
+  authorization_nonce?: string | null;
 }
 
 /** Animal ATIVO da(s) fazenda(s) vinculada(s) ao dispositivo — cache local
@@ -104,6 +113,8 @@ export interface SessionRow {
   fazenda_ids: string[];
   expires_at: string;
   last_sync_at: string | null;
+  installation_id: string | null;
+  device_configuration_id: string | null;
   // Ponte de hardware (balanca-platform/bridge) — configurada localmente por
   // estação, não vem do backend. Ex.: "http://192.168.0.50:8321".
   bridge_url: string | null;
@@ -139,6 +150,12 @@ export interface ContingencyStateRow {
   created_at: string;
 }
 
+export interface OfflineAuthLocal {
+  id: string; // authorization_id
+  nonce: string;
+  expires_at: string;
+}
+
 class BalancaDB extends Dexie {
   ordens!: EntityTable<OrdemPendenteLocal, "id">;
   pesagens!: EntityTable<PesagemLocal, "local_id">;
@@ -148,6 +165,7 @@ class BalancaDB extends Dexie {
   animais!: EntityTable<AnimalLocal, "id">;
   operadores!: EntityTable<OperadorLocal, "id">;
   contingency_state!: EntityTable<ContingencyStateRow, "id">;
+  offline_auths!: EntityTable<OfflineAuthLocal, "id">;
 
   constructor() {
     super("TARA_db");
@@ -169,6 +187,11 @@ class BalancaDB extends Dexie {
     this.version(5).stores({
       operadores: "id, status, identificador_externo",
     });
+    this.version(6).stores({
+      session: "id", // Trigger upgrade for SessionRow schema changes
+    });
+    this.version(7).stores({ pesagens: "local_id, ordem_id, server_id, synced, installation_id" });
+    this.version(8).stores({ offline_auths: "id, expires_at" });
   }
 }
 

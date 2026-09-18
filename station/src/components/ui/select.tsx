@@ -194,12 +194,10 @@ function SelectTrigger({
   )
 
   if (render) {
-    // eslint-disable-next-line react-hooks/refs
     return cloneElementWithProps(render, { ...triggerProps, ref: setTriggerNode }, content)
   }
 
   if (asChild && React.isValidElement(children)) {
-    // eslint-disable-next-line react-hooks/refs
     return cloneElementWithProps(children, { ...triggerProps, ref: setTriggerNode })
   }
 

@@ -36,6 +36,8 @@ export interface WebhookDestination { target_url: string; status: string; event_
 export interface PortalOrder { id: string; sistema_cliente: string; referencia_externa: string; subject_type: string; tipo_pesagem: string; status: string; peso_liquido_kg: string | number | null; created_at: string; concluida_em: string | null; }
 export interface PortalWeighing { id: string; ordem_id: string | null; local_id: string; etapa: string; peso_aferido_kg: string | number; captured_at: string; reconciliation_status: string; }
 export interface PortalUser { id: string; email: string; nome_exibicao: string; role: string; status: string; created_at: string; }
+export interface PortalStation { id: string; conta_id: string; conta_nome?: string | null; external_id: string; nome: string; activation_code: string | null; status: string; }
+export interface PortalOperator { id: string; codigo: string; identificador_externo: string | null; nome_exibicao: string; pessoa_ref: string | null; status: string; created_at: string; }
 export interface AccountDashboard { account_id: string; account_name: string; account_status: string; owner_email: string | null; owner_name: string | null; accounts_total: number; accounts_by_status: Record<string, number>; clients_total: number; api_keys_active: number; orders_total: number; orders_open: number; orders_completed: number; weighings_total: number; weighings_pending: number; stations_total: number; stations_active: number; operators_active: number; events_total: number; events_pending: number; client_systems: { client_id: string; nome: string; status: string; last_used_at: string | null }[]; }
 export interface PlatformSecuritySettings { session_minutes: number; idle_minutes: number; refresh_enabled: boolean; warning_minutes: number; }
 
@@ -161,6 +163,16 @@ export async function setWebhookStatus(session: Session, enabled: boolean) { ret
 export async function listPortalOrders(session: Session) { return apiFetch<PortalOrder[]>("/v1/portal/orders", session); }
 export async function listPortalWeighings(session: Session) { return apiFetch<PortalWeighing[]>("/v1/portal/weighings", session); }
 export async function listPortalUsers(session: Session) { return apiFetch<PortalUser[]>("/v1/portal/users", session); }
+export async function listPortalStations(session: Session) { return apiFetch<PortalStation[]>("/v1/portal/stations", session); }
+export async function createPortalStation(session: Session, payload: { external_id: string; nome: string }) { return apiFetch<PortalStation>("/v1/portal/stations", session, { method: "POST", body: JSON.stringify(payload) }); }
+export async function updatePortalStationStatus(session: Session, stationId: string, status: "ATIVA" | "SUSPENSA" | "REVOGADA") { return apiFetch<PortalStation>(`/v1/portal/stations/${encodeURIComponent(stationId)}/status`, session, { method: "PATCH", body: JSON.stringify({ status }) }); }
+export async function listPortalOperators(session: Session) { return apiFetch<PortalOperator[]>("/v1/portal/operators", session); }
+export async function createPortalOperator(session: Session, payload: { codigo: string; identificador_externo: string; nome_exibicao: string; pessoa_ref: string | null; senha_inicial: string }) { return apiFetch<PortalOperator>("/v1/portal/operators", session, { method: "POST", body: JSON.stringify(payload) }); }
+export async function updatePortalOperatorStatus(session: Session, operatorId: string, status: "ATIVO" | "INATIVO") { return apiFetch<PortalOperator>(`/v1/portal/operators/${encodeURIComponent(operatorId)}/status`, session, { method: "PATCH", body: JSON.stringify({ status }) }); }
+export async function resetPortalOperatorPin(session: Session, operatorId: string, novoPin: string) { return apiFetch<PortalOperator>(`/v1/portal/operators/${encodeURIComponent(operatorId)}/pin`, session, { method: "PATCH", body: JSON.stringify({ novo_pin: novoPin }) }); }
+export async function listPortalOperatorStations(session: Session, operatorId: string) { return apiFetch<string[]>(`/v1/portal/operators/${encodeURIComponent(operatorId)}/stations`, session); }
+export async function linkPortalOperator(session: Session, stationId: string, operatorId: string) { return apiFetch<{ status: string }>(`/v1/portal/stations/${encodeURIComponent(stationId)}/operators/${encodeURIComponent(operatorId)}`, session, { method: "PUT" }); }
+export async function unlinkPortalOperator(session: Session, stationId: string, operatorId: string) { return apiFetch<{ status: string }>(`/v1/portal/stations/${encodeURIComponent(stationId)}/operators/${encodeURIComponent(operatorId)}`, session, { method: "DELETE" }); }
 export async function updatePortalUser(session: Session, userId: string, payload: { role: string; status: string }) { return apiFetch<PortalUser>(`/v1/portal/users/${encodeURIComponent(userId)}`, session, { method: "PUT", body: JSON.stringify(payload) }); }
 
 export function formatDate(value: string | null): string {

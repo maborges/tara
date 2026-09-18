@@ -67,8 +67,13 @@ psql -h 192.168.0.3 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/015_w
 psql -h 192.168.0.3 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/016_platform_dashboard_rls.sql
 psql -h 192.168.0.3 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/017_pesagem_station.sql
 psql -h 192.168.0.3 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/018_table_comments.sql
+psql -h 192.168.0.3 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/019_pesagem_immutability.sql
+psql -h 192.168.0.3 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/020_shadow_order_status.sql
+psql -h 192.168.0.3 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/021_client_logical_key.sql
+psql -h 192.168.0.3 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/022_station_operator_provisioning.sql
 psql -h 192.168.0.3 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/023_credential_lookup_without_tenant.sql
 psql -h 192.168.0.3 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/024_remove_duplicate_api_client_secret_hash.sql
+psql -h 192.168.0.3 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/025_operator_status_and_normalized_external_id.sql
 ```
 
 Configure `service/.env`, principalmente `TARA_DATABASE_URL`,
@@ -216,9 +221,11 @@ necessário criar uma nova credencial.
 5. Instale e inicie o frontend do backoffice.
 6. Acesse `http://localhost:3004` e faça login com o administrador global.
 
-Estação, Bridge e worker de outbox ficam para a etapa seguinte. O backoffice
-administra clientes consumidores, credenciais de integração, estações,
-operadores e acompanhamento do outbox.
+A Estação, a Bridge e o worker de outbox completam a operação. Inicie o worker
+em outro processo com `./.venv/bin/python run_worker.py`, após configurar
+`TARA_OUTBOX_TENANT_IDS` no `service/.env`. O backoffice administra clientes
+consumidores, credenciais de integração, estações, operadores e acompanhamento
+do outbox.
 
 ### Serviço
 
@@ -290,8 +297,13 @@ psql -h 192.168.0.3 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/015_w
 psql -h 192.168.0.3 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/016_platform_dashboard_rls.sql
 psql -h 192.168.0.3 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/017_pesagem_station.sql
 psql -h 192.168.0.3 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/018_table_comments.sql
+psql -h 192.168.0.3 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/019_pesagem_immutability.sql
+psql -h 192.168.0.3 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/020_shadow_order_status.sql
+psql -h 192.168.0.3 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/021_client_logical_key.sql
+psql -h 192.168.0.3 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/022_station_operator_provisioning.sql
 psql -h 192.168.0.3 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/023_credential_lookup_without_tenant.sql
 psql -h 192.168.0.3 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/024_remove_duplicate_api_client_secret_hash.sql
+psql -h 192.168.0.3 -U borgus -W -d farms -v ON_ERROR_STOP=1 -f migrations/025_operator_status_and_normalized_external_id.sql
 ```
 
 Inicie a API:
@@ -311,6 +323,25 @@ curl http://127.0.0.1:8010/readyz
 Consulte [service/docs/MANUAL_OPERACAO.md](service/docs/MANUAL_OPERACAO.md).
 
 ### Estação
+
+Antes de iniciar a estação pela primeira vez ou ao provisionar uma nova estação offline, é necessário configurar as credenciais de acesso no backend da Estação.
+As chaves de API devem ser geradas através do Portal do Cliente. 
+
+Crie ou edite o arquivo `station/.env.local` contendo a URL da API e as credenciais geradas:
+
+```env
+# A URL deve apontar para o ambiente onde as credenciais foram geradas.
+# Se gerou no Portal de Produção, aponte para a API de Produção.
+# Se gerou no Portal Local (localhost:3005), aponte para a API local (localhost:8010).
+TARA_SERVICE_API_URL=http://127.0.0.1:8010
+TARA_SERVICE_CLIENT_ID=bal_SeuClientIdGeradoNoPortal
+TARA_SERVICE_CLIENT_SECRET=SeuSecretGeradoNoPortal
+```
+
+> [!WARNING]
+> O servidor da Estação (Next.js) carrega o arquivo `.env.local` apenas durante sua inicialização. Se você atualizar qualquer variável neste arquivo, é estritamente necessário **reiniciar o processo no terminal** (usando `Ctrl+C` e iniciando novamente) para que as novas configurações tenham efeito. Recarregar apenas a página no navegador não será suficiente.
+
+Iniciando a Estação:
 
 ```bash
 cd /opt/lampp/htdocs/tara

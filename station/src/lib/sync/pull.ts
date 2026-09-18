@@ -1,5 +1,5 @@
 import { apiFetch } from "@/lib/api";
-import { db, getSession, setSession, type AnimalLocal, type OrdemPendenteLocal, type OperadorLocal } from "@/lib/db";
+import { db, getSession, setSession, type AnimalLocal, type OrdemPendenteLocal, type OperadorLocal, type OfflineAuthLocal } from "@/lib/db";
 
 interface SyncPullResponse {
   sync_at: string;
@@ -14,6 +14,10 @@ interface ProvisioningResponse {
   operators: OperadorLocal[];
 }
 
+interface ReplenishResponse {
+  items: OfflineAuthLocal[];
+}
+
 export async function pullSync(): Promise<{ ok: boolean; error?: string }> {
   const session = await getSession();
   if (!session) return { ok: false, error: "Estação não ativada." };
@@ -26,8 +30,29 @@ export async function pullSync(): Promise<{ ok: boolean; error?: string }> {
       apiFetch<SyncPullResponse>(`/api/v1/balanca/sync/pull?${params.toString()}`),
       apiFetch<ProvisioningResponse>("/api/v1/balanca/provisioning"),
     ]);
+    
+    // Purge expired auths
+    const nowIso = new Date().toISOString();
+    await db.offline_auths.where("expires_at").below(nowIso).delete();
+    
+    const countAuths = await db.offline_auths.count();
+    let newAuths: OfflineAuthLocal[] = [];
+    if (countAuths < 50 && session.device_configuration_id) {
+        try {
+            const replResp = await apiFetch<ReplenishResponse>(
+                `/api/v1/balanca/stations/offline-authorizations/replenish`,
+                {
+                    method: "POST",
+                    body: JSON.stringify({ device_configuration_id: session.device_configuration_id, count: 50 })
+                }
+            );
+            newAuths = replResp.items;
+        } catch (e) {
+            console.warn("Falha ao reabastecer pool offline:", e);
+        }
+    }
 
-    await db.transaction("rw", db.ordens, db.animais, db.operadores, async () => {
+    await db.transaction("rw", db.ordens, db.animais, db.operadores, db.offline_auths, async () => {
       for (const ordem of data.ordens_pendentes) {
         await db.ordens.put(ordem);
       }
@@ -42,6 +67,7 @@ export async function pullSync(): Promise<{ ok: boolean; error?: string }> {
       }
       await db.operadores.clear();
       if (provisioning.operators.length > 0) await db.operadores.bulkPut(provisioning.operators);
+      if (newAuths.length > 0) await db.offline_auths.bulkPut(newAuths);
     });
 
     await setSession({ ...session, last_sync_at: data.sync_at,

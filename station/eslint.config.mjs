@@ -1,6 +1,6 @@
-import js from "../../node_modules/.pnpm/@eslint+js@9.39.4/node_modules/@eslint/js/src/index.js";
-import globals from "../../node_modules/.pnpm/globals@16.4.0/node_modules/globals/index.js";
-import tsParser from "../../node_modules/.pnpm/@typescript-eslint+parser@8.57.0_eslint@9.39.4_jiti@2.6.1__typescript@5.9.3/node_modules/@typescript-eslint/parser/dist/index.js";
+import js from "@eslint/js";
+import globals from "globals";
+import tsParser from "@typescript-eslint/parser";
 
 const config = [
   {

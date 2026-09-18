@@ -69,14 +69,18 @@ que a maioria dos indicadores usa:
 # Terminal 1
 ./.venv/bin/python simulator.py --port 4001 --peso-base 12500
 
-# config.yaml:
-#   connection_type: TCP
-#   tcp: { host: 127.0.0.1, port: 4001 }
-
 # Terminal 2
-./.venv/bin/python -m balanca_bridge.main
-curl http://127.0.0.1:8321/peso-atual
+TARA_BRIDGE_CONFIG=config.simulator.yaml ./.venv/bin/python -m balanca_bridge.main
+
+# Terminal 3
+curl http://127.0.0.1:8322/peso-atual
 ```
+
+O projeto já fornece `config.simulator.yaml`, que usa `TCP` em
+`127.0.0.1:4001` e publica a Bridge simulada em `127.0.0.1:8322`. Ela não
+altera `config.yaml`, portanto a configuração do indicador físico (normalmente
+na porta 8321) é preservada. Para testar a Estação no mesmo computador, use
+`http://localhost:8322` como URL da Bridge.
 
 ## Rodar como serviço no boot (Raspberry Pi / Linux)
 

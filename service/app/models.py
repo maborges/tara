@@ -306,6 +306,88 @@ class Estacao(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
 
 
+class EstacaoInstalacao(Base):
+    __tablename__ = "estacao_instalacoes"
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "id", name="uq_TARA_instalacao_tenant"),
+        {"schema": "tara", "comment": "Registro de uma instalacao concreta de uma estacao em um terminal fisico/browser."},
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
+    tenant_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    estacao_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("tara.estacoes.id", ondelete="CASCADE"), nullable=False)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="ACTIVE")
+    token_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    drain_expires_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+
+class DeviceConfiguration(Base):
+    __tablename__ = "device_configurations"
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "id", name="uq_TARA_device_config_tenant"),
+        {"schema": "tara", "comment": "Registro historico da configuracao tecnica (Bridge/Equipamento) usada por uma instalacao."},
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
+    tenant_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    estacao_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("tara.estacoes.id", ondelete="CASCADE"), nullable=False)
+    instalacao_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("tara.estacao_instalacoes.id", ondelete="CASCADE"), nullable=False)
+    bridge_url: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="PENDING")
+    proof_key_encrypted: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    replaced_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+
+class OfflineCaptureAuthorization(Base):
+    __tablename__ = "offline_capture_authorizations"
+    __table_args__ = (
+        Index("ix_tara_offline_auth_instalacao", "tenant_id", "instalacao_id", "status"),
+        {"schema": "tara", "comment": "Autorizações prévias emitidas pela Nuvem para capturas offline."}
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
+    tenant_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    estacao_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("tara.estacoes.id", ondelete="CASCADE"), nullable=False)
+    instalacao_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("tara.estacao_instalacoes.id", ondelete="CASCADE"), nullable=False)
+    device_configuration_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("tara.device_configurations.id", ondelete="CASCADE"), nullable=False)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="AVAILABLE")
+    nonce: Mapped[str] = mapped_column(String(64), nullable=False)
+    consumed_by_local_id: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    consumed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    expires_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+
+
+class BridgeChallenge(Base):
+    __tablename__ = "bridge_challenges"
+    __table_args__ = (
+        Index("ix_tara_bridge_challenges_instalacao", "instalacao_id"),
+        {"schema": "tara", "comment": "Desafios criptográficos para validação real da Bridge."}
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
+    tenant_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    instalacao_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("tara.estacao_instalacoes.id", ondelete="CASCADE"), nullable=False)
+    nonce: Mapped[str] = mapped_column(String(64), nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    used_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+
+class BridgeValidation(Base):
+    __tablename__ = "bridge_validations"
+    __table_args__ = ({"schema": "tara"},)
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
+    tenant_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    instalacao_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("tara.estacao_instalacoes.id", ondelete="CASCADE"), nullable=False)
+    bridge_url: Mapped[str] = mapped_column(String(255), nullable=False)
+    token_proof_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    used_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+
 class Operador(Base):
     __tablename__ = "operadores"
     __table_args__ = (
@@ -357,6 +439,10 @@ class Ordem(Base):
     contexto: Mapped[dict] = mapped_column(JSONB, nullable=False)
     status: Mapped[str] = mapped_column(String(40), nullable=False)
     peso_liquido_kg: Mapped[Decimal | None] = mapped_column(Numeric(12, 3), nullable=True)
+    # Resultado físico completo da operação (migration 033).
+    peso_bruto_kg: Mapped[Decimal | None] = mapped_column(Numeric(12, 3), nullable=True)
+    peso_tara_kg: Mapped[Decimal | None] = mapped_column(Numeric(12, 3), nullable=True)
+    tara_source: Mapped[str | None] = mapped_column(String(20), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
     concluida_em: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
@@ -372,6 +458,8 @@ class Pesagem(Base):
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
     tenant_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
     estacao_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("tara.estacoes.id"), nullable=True)
+    instalacao_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("tara.estacao_instalacoes.id"), nullable=True)
+    device_configuration_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("tara.device_configurations.id"), nullable=True)
     ordem_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("tara.ordens.id"), nullable=True)
     local_id: Mapped[str] = mapped_column(String(120), nullable=False)
     etapa: Mapped[str] = mapped_column(String(30), nullable=False)

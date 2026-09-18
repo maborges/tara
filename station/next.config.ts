@@ -41,6 +41,10 @@ const withPWA = require("next-pwa")({
 const nextConfig: NextConfig = {
   reactStrictMode: true,
   turbopack: {},
+  experimental: { useTypeScriptCli: false },
+  // Permite que a rotina de empacotamento use um build isolado sem disputar
+  // o diretório .next de uma estação em desenvolvimento.
+  distDir: process.env.TARA_STATION_DIST_DIR || ".next",
 };
 
 module.exports = withPWA(nextConfig);

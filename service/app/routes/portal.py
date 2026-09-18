@@ -12,7 +12,7 @@ from ..schemas import (
     LoginIn, PortalActionOut, PortalEmailTokenIn, PortalForgotPasswordIn,
     PortalLoginOut, PortalMeOut, PortalResetTokenOut,
     PortalPasswordResetIn, PortalRegisterIn, PortalRegisterOut, PortalAccountUpdateIn, AccountDashboardOut, PlatformSecuritySettingsOut,
-    WebhookDestinationIn, WebhookDestinationOut, WebhookStatusIn, WebhookTestOut, OrderOut, WeighingOut, PortalUserOut, PortalUserUpdateIn, PortalOperatorIn, OperatorOut, StationOut, StationRecoveryOut,
+    WebhookDestinationIn, WebhookDestinationOut, WebhookStatusIn, WebhookTestOut, OrderOut, WeighingOut, PortalUserOut, PortalUserUpdateIn, PortalOperatorIn, OperatorOut, OperatorStatusUpdateIn, OperatorResetPinIn, StationIn, StationOut, StationInstallationOut, StationRecoveryOut, StationStatusUpdateIn,
 )
 from ..security import issue_portal_token, require_portal_admin, require_portal
 from ..platform_identity import (
@@ -23,8 +23,8 @@ from ..platform_identity import (
     verify_portal_password_reset_token,
 )
 from ..platform_identity import create_api_client, encrypt_platform_secret, revoke_api_client, rotate_api_client
-from ..operation import create_operator
-from ..auth import new_token, station_token_hash
+from ..operation import create_operator, create_station, update_operator_status, reset_operator_pin, update_station_status
+from ..auth import new_activation_code, new_token, station_token_hash
 from ..models import WebhookDestination
 from ..delivery import OutboxDelivery
 from ..platform_identity import decrypt_platform_secret
@@ -55,11 +55,88 @@ async def post_portal_operator(data: PortalOperatorIn, context=Depends(require_p
     return operator
 
 
+@router.patch("/operators/{operator_id}/status", response_model=OperatorOut)
+async def patch_portal_operator_status(operator_id: uuid.UUID, data: OperatorStatusUpdateIn, context=Depends(require_portal_admin())):
+    tenant_id, session, _user = context
+    try:
+        operator = await update_operator_status(session, tenant_id, operator_id, data.status)
+    except ValueError as exc:
+        await session.rollback()
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    await session.commit()
+    return operator
+
+
+@router.patch("/operators/{operator_id}/pin", response_model=OperatorOut)
+async def patch_portal_operator_pin(operator_id: uuid.UUID, data: OperatorResetPinIn, context=Depends(require_portal_admin())):
+    tenant_id, session, _user = context
+    try:
+        operator = await reset_operator_pin(session, tenant_id, operator_id, data.novo_pin)
+    except ValueError as exc:
+        await session.rollback()
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    await session.commit()
+    return operator
+
+
+@router.get("/operators/{operator_id}/stations", response_model=list[str])
+async def get_portal_operator_stations(operator_id: uuid.UUID, context=Depends(require_portal_admin())):
+    tenant_id, session, _user = context
+    operator = (await session.execute(select(Operador).where(
+        Operador.id == operator_id, Operador.tenant_id == tenant_id,
+    ))).scalar_one_or_none()
+    if operator is None:
+        raise HTTPException(status_code=404, detail="Operador não encontrado")
+    result = await session.execute(select(EstacaoOperador.estacao_id).where(
+        EstacaoOperador.operador_id == operator_id,
+        EstacaoOperador.tenant_id == tenant_id,
+        EstacaoOperador.status == "ATIVO",
+    ))
+    return [str(station_id) for station_id in result.scalars().all()]
+
+
 @router.get("/stations", response_model=list[StationOut])
 async def get_portal_stations(context=Depends(require_portal_admin())):
     tenant_id, session, _user = context
     result = await session.execute(select(Estacao).where(Estacao.tenant_id == tenant_id).order_by(Estacao.nome))
     return list(result.scalars())
+
+
+@router.post("/stations", response_model=StationOut, status_code=201)
+async def post_portal_station(data: StationIn, context=Depends(require_portal_admin())):
+    tenant_id, session, _user = context
+    try:
+        station = await create_station(session, tenant_id, data)
+    except ValueError as exc:
+        await session.rollback()
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    await session.commit()
+    return station
+
+
+@router.post("/stations/{station_id}/installations", response_model=StationInstallationOut, status_code=201)
+async def post_portal_station_installation(station_id: uuid.UUID, context=Depends(require_portal_admin())):
+    tenant_id, session, _user = context
+    station = (await session.execute(select(Estacao).where(Estacao.id == station_id, Estacao.tenant_id == tenant_id))).scalar_one_or_none()
+    if station is None:
+        raise HTTPException(status_code=404, detail="Estação não encontrada")
+    if station.status != "ATIVA":
+        raise HTTPException(status_code=422, detail="Somente uma estação ativa pode ser reinstalada")
+    station.activation_code = new_activation_code()
+    await session.commit()
+    return StationInstallationOut(station_id=station.id, activation_code=station.activation_code)
+
+
+@router.patch("/stations/{station_id}/status", response_model=StationOut)
+async def patch_portal_station_status(station_id: uuid.UUID, data: StationStatusUpdateIn, context=Depends(require_portal_admin())):
+    tenant_id, session, _user = context
+    try:
+        station = await update_station_status(session, tenant_id, station_id, data.status)
+    except ValueError as exc:
+        await session.rollback()
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    await session.commit()
+    return station
 
 
 @router.put("/stations/{station_id}/operators/{operator_id}")
@@ -69,12 +146,29 @@ async def put_portal_station_operator(station_id: uuid.UUID, operator_id: uuid.U
     operator = (await session.execute(select(Operador).where(Operador.id == operator_id, Operador.tenant_id == tenant_id))).scalar_one_or_none()
     if station is None or operator is None:
         raise HTTPException(status_code=404, detail="Estação ou operador não encontrado")
+    if operator.status != "ATIVO":
+        raise HTTPException(status_code=422, detail="Ative o operador antes de vinculá-lo a uma estação")
     link = (await session.execute(select(EstacaoOperador).where(EstacaoOperador.estacao_id == station_id, EstacaoOperador.operador_id == operator_id))).scalar_one_or_none()
     if link is None:
         link = EstacaoOperador(estacao_id=station_id, operador_id=operator_id, tenant_id=tenant_id, status="ATIVO", created_at=datetime.utcnow())
         session.add(link)
     else:
         link.status = "ATIVO"
+    await session.commit()
+    return {"station_id": station_id, "operator_id": operator_id, "status": link.status}
+
+
+@router.delete("/stations/{station_id}/operators/{operator_id}")
+async def delete_portal_station_operator(station_id: uuid.UUID, operator_id: uuid.UUID, context=Depends(require_portal_admin())):
+    tenant_id, session, _user = context
+    link = (await session.execute(select(EstacaoOperador).where(
+        EstacaoOperador.estacao_id == station_id,
+        EstacaoOperador.operador_id == operator_id,
+        EstacaoOperador.tenant_id == tenant_id,
+    ))).scalar_one_or_none()
+    if link is None:
+        raise HTTPException(status_code=404, detail="Vínculo entre Estação e Operador não encontrado")
+    link.status = "REVOGADO"
     await session.commit()
     return {"station_id": station_id, "operator_id": operator_id, "status": link.status}
 

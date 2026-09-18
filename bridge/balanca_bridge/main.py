@@ -7,6 +7,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
 
 from balanca_bridge.config import BridgeConfig, load_config
 from balanca_bridge.protocol_adapter import ProtocolAdapter
@@ -60,9 +61,72 @@ app = FastAPI(title="Balança Bridge", version="0.1.0", lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],  # rede local/confiável — PWA pode rodar em qualquer host da LAN
-    allow_methods=["GET"],
+    allow_methods=["GET", "POST", "OPTIONS"],
     allow_headers=["*"],
 )
+
+
+def _get_proof_key_path() -> str:
+    config_dir = os.path.dirname(CONFIG_PATH) or "."
+    return os.path.join(config_dir, ".proof_key.txt")
+
+
+class ProvisionIn(BaseModel):
+    proof_key: str
+
+@app.post("/provision")
+async def provision_bridge(payload: ProvisionIn, request: Request):
+    _check_token(request, request.app.state.config)
+    try:
+        with open(_get_proof_key_path(), "w", encoding="utf-8") as f:
+            f.write(payload.proof_key.strip())
+    except IOError as e:
+        logger.error(f"Failed to save proof key: {e}")
+        raise HTTPException(status_code=500, detail="Erro ao gravar chave de prova na Bridge")
+    return {"status": "ok"}
+
+
+
+class ChallengeIn(BaseModel):
+    challenge_id: str
+    nonce: str
+    station_id: str
+    installation_id: str
+    expires_at: str
+
+@app.post("/challenge")
+async def answer_challenge(payload: ChallengeIn, request: Request):
+    # A Bridge proof no longer relies on api_token hash. 
+    # It must use the secure proof_key provisioned by the Station.
+    
+    proof_key_path = _get_proof_key_path()
+    if not os.path.exists(proof_key_path):
+        raise HTTPException(status_code=400, detail="Bridge proof_key não configurada (Bridge não provisionada)")
+        
+    try:
+        with open(proof_key_path, "r", encoding="utf-8") as f:
+            proof_key = f.read().strip()
+    except IOError:
+        raise HTTPException(status_code=500, detail="Erro ao ler a proof_key")
+        
+    if not proof_key:
+        raise HTTPException(status_code=400, detail="proof_key vazia")
+    
+    import hmac
+    import hashlib
+    
+    # 2. Reconstruir a string canônica
+    canonical_challenge = f"{payload.challenge_id}|{payload.nonce}|{payload.station_id}|{payload.installation_id}|{payload.expires_at}"
+    
+    # 3. Assinar usando HMAC(key=proof_key, msg=canonical_challenge)
+    proof = hmac.new(
+        key=proof_key.encode(),
+        msg=canonical_challenge.encode(),
+        digestmod=hashlib.sha256
+    ).hexdigest()
+    
+    # Não retornamos mais token_hash, apenas proof
+    return {"proof": proof}
 
 
 @app.get("/health")
