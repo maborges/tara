@@ -1,9 +1,19 @@
 # BALANCA-PILOT-02 — Execução Controlada em Campo
 
 **TIPO:** EXECUÇÃO CONTROLADA DE PILOTO REAL + COLETA DE EVIDÊNCIAS + REGISTRO DE INCIDENTES
-**STATUS:** CONCLUÍDO (Documentação base preparada)
-**RESULTADO:** NO-GO (Pendente de execução real e coleta de evidências)
-**AMPLIAÇÃO DO PILOTO:** NÃO AUTORIZADA (Pendente de evidências de execução)
+BALANCA-PILOT-02
+
+STATUS:
+AGUARDANDO EXECUÇÃO EM CAMPO
+
+READINESS PARA EXECUTAR O PILOTO:
+GO
+
+RESULTADO DO PILOTO:
+PENDENTE
+
+AMPLIAÇÃO DO PILOTO:
+NÃO AUTORIZADA
 
 ## 1. Resumo executivo
 O piloto físico encontra-se na fase de planejamento e estruturação de documentos, aguardando execução real no ambiente do cliente. Nenhuma informação foi inferida; todos os testes aguardam evidência física.
@@ -102,4 +112,17 @@ O piloto físico encontra-se na fase de planejamento e estruturação de documen
 - **Recomendações Pós-Piloto:** PENDENTE DE INFORMAÇÃO
 
 ## 23. Veredicto
-- **Veredicto Final:** NO-GO (Aguardando evidência de operação diária autônoma, captura confiável, offline recuperável, sync confiável, Delivery conciliado e incidentes controlados)
+
+READINESS PARA EXECUTAR O PILOTO:
+GO
+
+RESULTADO DO PILOTO:
+PENDENTE
+
+Justificativa:
+A fundação técnica e a preparação operacional foram aprovadas nas fases anteriores. O BALANCA-PILOT-02 encontra-se aguardando execução física no ambiente do primeiro cliente. Ainda não existem evidências suficientes para emitir GO, GO COM RESSALVAS ou NO-GO sobre o resultado do piloto.
+
+AMPLIAÇÃO DO PILOTO:
+NÃO AUTORIZADA
+
+A ampliação somente poderá ser decidida após a execução, coleta de evidências, reconciliação e fechamento do piloto.
