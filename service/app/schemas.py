@@ -640,3 +640,25 @@ class SyncPushOut(BaseModel):
 class OperatorLoginIn(BaseModel):
     operador_id: uuid.UUID
     pin: str = Field(min_length=4, max_length=32)
+
+class DeliveryReceiptOut(BaseModel):
+    id: uuid.UUID
+    weighing_id: uuid.UUID
+    payload: dict[str, Any]
+    status: str
+    created_at: datetime
+    acknowledged_at: datetime | None = None
+
+class DeliveryPullPageOut(BaseModel):
+    items: list[DeliveryReceiptOut]
+    next_cursor: str | None = None
+
+class DeliveryAckIn(BaseModel):
+    weighing_ids: list[uuid.UUID] = Field(..., max_length=100)
+
+class DeliveryAckResult(BaseModel):
+    weighing_id: uuid.UUID
+    status: str
+
+class DeliveryAckOut(BaseModel):
+    results: list[DeliveryAckResult]

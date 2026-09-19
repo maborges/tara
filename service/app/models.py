@@ -283,6 +283,45 @@ class Outbox(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
 
 
+class DeliveryReceipt(Base):
+    __tablename__ = "delivery_receipts"
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "pesagem_id", name="uq_TARA_delivery_pesagem"),
+        {"schema": "tara", "comment": "Controle de entrega de pesagens para os sistemas consumidores."},
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
+    tenant_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    conta_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("tara.contas.id"), nullable=False)
+    pesagem_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("tara.pesagens.id", ondelete="CASCADE"), nullable=False)
+    payload: Mapped[dict] = mapped_column(JSONB, nullable=False)
+    status: Mapped[str] = mapped_column(String(30), nullable=False, default="PENDENTE")
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    acknowledged_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    acknowledged_by_api_client_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("tara.api_clients.id"), nullable=True)
+    acknowledged_by_credential_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("tara.api_client_secrets.id"), nullable=True)
+
+
+class DeliveryTombstone(Base):
+    __tablename__ = "delivery_tombstones"
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "pesagem_id", name="uq_TARA_delivery_tombstone_pesagem"),
+        {"schema": "tara", "comment": "Registro definitivo de que uma pesagem foi entregue e seu payload já foi expurgado."},
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
+    tenant_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    conta_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("tara.contas.id", ondelete="CASCADE"), nullable=False)
+    pesagem_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("tara.pesagens.id", ondelete="CASCADE"), nullable=False)
+    estacao_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("tara.estacoes.id"), nullable=True)
+    occurred_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    acknowledged_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    acknowledged_by_api_client_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("tara.api_clients.id"), nullable=True)
+    acknowledged_by_credential_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("tara.api_client_secrets.id"), nullable=True)
+    purged_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    payload_checksum: Mapped[str] = mapped_column(String(64), nullable=False)
+
+
 class Estacao(Base):
     __tablename__ = "estacoes"
     __table_args__ = (

@@ -132,27 +132,56 @@ async def test_block_02_bridge_validation_without_backend_http():
         response = await client.post("/v1/stations/activate", headers=integration_headers, json={"activation_code": activation_code})
         station_token = response.json()["station_token"]
         installation_id = response.json()["installation_id"]
+        station_id = response.json()["station_id"]
 
         station_headers = {"Authorization": f"Bearer {station_token}"}
         
-        # Test creating bridge validation (backend shouldn't make HTTP request)
-        # Assuming the BridgeUrl could be anything and token could be anything
+        # Create device config to get proof key
+        response = await client.post("/v1/stations/device-configurations", headers=station_headers, json={
+            "installation_id": installation_id,
+            "bridge_url": "http://127.0.0.1:8321",
+        })
+        assert response.status_code == 201
+        dev_config_id = response.json()["id"]
+        bridge_proof_key = response.json()["bridge_proof_key"]
+
+        # Request challenge
+        response = await client.post("/v1/stations/bridge-validations/challenge", headers=station_headers, json={
+            "device_configuration_id": dev_config_id
+        })
+        assert response.status_code == 201
+        challenge_id = response.json()["challenge_id"]
+        nonce = response.json()["nonce"]
+
+        # Fetch expires_at from DB
+        async with async_sessionmaker(_engine, expire_on_commit=False)() as s:
+            from app.models import BridgeChallenge
+            from sqlalchemy import select
+            ch = (await s.execute(select(BridgeChallenge).where(BridgeChallenge.id == uuid.UUID(challenge_id)))).scalar_one()
+            expires_at = ch.expires_at.isoformat()
+
+        canonical_challenge = f"{challenge_id}|{nonce}|{station_id}|{installation_id}|{expires_at}"
+        import hmac, hashlib
+        proof = hmac.new(bridge_proof_key.encode(), canonical_challenge.encode(), hashlib.sha256).hexdigest()
+
+        # Submit validation
         response = await client.post("/v1/stations/bridge-validations", headers=station_headers, json={
             "bridge_url": "http://127.0.0.1:8321",
-            "bridge_token_proof": "mysecret",
+            "challenge_id": challenge_id,
+            "bridge_token_proof": proof,
             "peso_kg": 100.0
         })
         assert response.status_code == 201
         validation_id = response.json()["validation_id"]
 
-        # Test creating device configuration using this validation id
+        # Test creating device configuration using this validation id (now it should remain PENDING until explicitly challenged)
         response = await client.post("/v1/stations/device-configurations", headers=station_headers, json={
             "installation_id": installation_id,
             "bridge_url": "http://127.0.0.1:8321",
             "validation_id": validation_id
         })
         assert response.status_code == 201
-        assert response.json()["status"] == "ACTIVE"
+        assert response.json()["status"] == "PENDING"
         assert response.json()["bridge_url"] == "http://127.0.0.1:8321"
 
 

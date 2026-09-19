@@ -153,12 +153,54 @@ async def test_standalone_service_order_station_weighing_observer_flow():
             await update_station_status(session, uuid.UUID(tenant_id), uuid.UUID(station_id), "ATIVA")
             await session.commit()
 
+        # Activação do device
+        response = await client.post("/v1/stations/device-configurations", headers=station_headers, json={
+            "installation_id": installation_id,
+            "bridge_url": "http://127.0.0.1:8321",
+        })
+        assert response.status_code == 201
+        device_configuration_id = response.json()["id"]
+        bridge_proof_key = response.json()["bridge_proof_key"]
+
+        response = await client.post("/v1/stations/bridge-validations/challenge", headers=station_headers, json={
+            "device_configuration_id": device_configuration_id
+        })
+        challenge_id = response.json()["challenge_id"]
+        nonce = response.json()["nonce"]
+
+        async with async_sessionmaker(_engine, expire_on_commit=False)() as s:
+            from app.models import BridgeChallenge
+            from sqlalchemy import select
+            ch = (await s.execute(select(BridgeChallenge).where(BridgeChallenge.id == uuid.UUID(challenge_id)))).scalar_one()
+            expires_at = ch.expires_at.isoformat()
+
+        canonical_challenge = f"{challenge_id}|{nonce}|{station_id}|{installation_id}|{expires_at}"
+        import hmac, hashlib
+        proof = hmac.new(bridge_proof_key.encode(), canonical_challenge.encode(), hashlib.sha256).hexdigest()
+
+        response = await client.post("/v1/stations/bridge-validations", headers=station_headers, json={
+            "bridge_url": "http://127.0.0.1:8321",
+            "challenge_id": challenge_id,
+            "bridge_token_proof": proof,
+            "peso_kg": 100.0
+        })
+        assert response.status_code == 201
+
+        # Replenish offline authorizations
+        response = await client.post("/v1/stations/offline-authorizations/replenish", headers=station_headers, json={
+            "device_configuration_id": device_configuration_id,
+            "count": 1
+        })
+        assert response.status_code == 201
+        authorization_id = response.json()["items"][0]["id"]
+
         response = await client.post(
             "/v1/stations/sync/push",
             headers=station_headers,
             json={
                 "items": [{
                     "local_id": str(uuid.uuid4()),
+                    "authorization_id": authorization_id,
                     "payload": {
                         "ordem_id": order_id,
                         "installation_id": installation_id,
@@ -167,6 +209,7 @@ async def test_standalone_service_order_station_weighing_observer_flow():
                         "peso_aferido_kg": "12000.000",
                         "peso_tara_kg": "1000.000",
                         "captured_via": "MANUAL",
+                        "authorization_id": authorization_id,
                     },
                 }],
             },

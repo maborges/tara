@@ -9,7 +9,7 @@ from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .auth import new_activation_code, new_token, station_token_hash
-from .models import Cliente, Conta, Estacao, EstacaoInstalacao, DeviceConfiguration, Operador, Ordem, Pesagem
+from .models import Cliente, Conta, DeliveryReceipt, Estacao, EstacaoInstalacao, DeviceConfiguration, Operador, Ordem, Pesagem
 from .weighing_events import build_completed_weighing_outbox
 
 
@@ -339,11 +339,15 @@ async def complete_weighing(session: AsyncSession, tenant_id: uuid.UUID, data) -
             order.tara_source = tara_source
             order.concluida_em = datetime.utcnow()
             result = (peso_bruto, peso_tara, peso_liquido, tara_source)
-            session.add(build_completed_weighing_outbox(weight, order, data, account.id, result=result))
+            outbox = build_completed_weighing_outbox(weight, order, data, account.id, result=result)
+            session.add(outbox)
+            session.add(DeliveryReceipt(id=uuid.uuid4(), tenant_id=weight.tenant_id, conta_id=account.id, pesagem_id=weight.id, payload=outbox.payload, created_at=outbox.created_at))
         else:
             order.status = "EM_PESAGEM"
     else:
-        session.add(build_completed_weighing_outbox(weight, order, data, account.id))
+        outbox = build_completed_weighing_outbox(weight, order, data, account.id)
+        session.add(outbox)
+        session.add(DeliveryReceipt(id=uuid.uuid4(), tenant_id=weight.tenant_id, conta_id=account.id, pesagem_id=weight.id, payload=outbox.payload, created_at=outbox.created_at))
 
     await session.flush()
     return weight

@@ -40,6 +40,8 @@ INTEGRATION_SCOPES = {
     "webhooks:read",
     "webhooks:manage",
     "webhooks:replay",
+    "delivery:read",
+    "delivery:write",
 }
 
 

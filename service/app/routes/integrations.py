@@ -4,12 +4,12 @@ import base64
 import json
 from datetime import datetime, timedelta
 import uuid
-from sqlalchemy import or_, select, update, func
+from sqlalchemy import and_, or_, select, update, func
 
 from ..auth import get_session, require_station, set_tenant_context
 from ..security import require_backoffice, require_client_scope
 from ..config import get_settings
-from ..models import ApiClient, Cliente, Conta, Estacao, EstacaoInstalacao, EstacaoOperador, DeviceConfiguration, BridgeValidation, Operador, Ordem, Outbox, OutboxReplayAudit, Pesagem
+from ..models import ApiClient, Cliente, Conta, DeliveryReceipt, Estacao, EstacaoInstalacao, EstacaoOperador, DeviceConfiguration, BridgeValidation, Operador, Ordem, Outbox, OutboxReplayAudit, Pesagem
 from ..schemas import (
     ActivationIn, ActivationOut, AccountOut, ClientIn, ClientOut, EventOut, EventReplayAuditOut, OperatorIn, OperatorOut, ProvisionedOperatorOut, StationProvisioningOut,
     OrderIn, OrderOut, OrderPageOut, StationIn, StationOut, WeighingIn, WeighingOut, WeighingPageOut, WeighingReconciliationIn,
@@ -17,6 +17,7 @@ from ..schemas import (
     ApiClientIn, ApiClientUpdateIn, ApiClientOut, ApiClientCredentialOut, ApiClientStatusOut, ApiClientListOut,
     ContingencyPackageIn, ContingencyImportOut,
     DeviceConfigurationIn, DeviceConfigurationOut, BridgeValidationIn, BridgeValidationOut,
+    DeliveryReceiptOut, DeliveryPullPageOut, DeliveryAckIn, DeliveryAckResult, DeliveryAckOut,
 )
 from .. import schemas
 from .. import models
@@ -962,3 +963,103 @@ async def get_admin_event_replays(
         OutboxReplayAudit.outbox_id == event_id, OutboxReplayAudit.tenant_id == tenant_id,
     ).order_by(OutboxReplayAudit.created_at.desc()))
     return list(result.scalars())
+
+
+@router.get("/delivery/pending", response_model=DeliveryPullPageOut)
+async def get_delivery_pending(
+    limit: int = Query(100, ge=1, le=500),
+    cursor: str | None = Query(None, description="Cursor opaque string (created_at,id)"),
+    context=Depends(require_client_scope("delivery:read")),
+):
+    tenant_id, session, client = context
+
+    stmt = select(DeliveryReceipt).where(
+        DeliveryReceipt.tenant_id == tenant_id,
+        DeliveryReceipt.status == "PENDENTE",
+    )
+    
+    if cursor:
+        try:
+            # Decode cursor
+            cursor_data = json.loads(base64.urlsafe_b64decode(cursor).decode('utf-8'))
+            cursor_created_at = datetime.fromisoformat(cursor_data[0])
+            cursor_id = uuid.UUID(cursor_data[1])
+            stmt = stmt.where(
+                or_(
+                    DeliveryReceipt.created_at > cursor_created_at,
+                    (DeliveryReceipt.created_at == cursor_created_at) & (DeliveryReceipt.id > cursor_id)
+                )
+            )
+        except Exception:
+            raise HTTPException(status_code=400, detail="Invalid cursor")
+            
+    stmt = stmt.order_by(DeliveryReceipt.created_at.asc(), DeliveryReceipt.id.asc()).limit(limit)
+    result = await session.execute(stmt)
+    receipts = list(result.scalars())
+    
+    next_cursor = None
+    if len(receipts) == limit:
+        last = receipts[-1]
+        cursor_data = [last.created_at.isoformat(), str(last.id)]
+        next_cursor = base64.urlsafe_b64encode(json.dumps(cursor_data).encode('utf-8')).decode('utf-8')
+        
+    items = [
+        DeliveryReceiptOut(
+            id=r.id,
+            weighing_id=r.pesagem_id,
+            payload=r.payload,
+            status=r.status,
+            created_at=r.created_at,
+            acknowledged_at=r.acknowledged_at
+        ) for r in receipts
+    ]
+    
+    return DeliveryPullPageOut(items=items, next_cursor=next_cursor)
+
+
+@router.post("/delivery/ack", response_model=DeliveryAckOut)
+async def post_delivery_ack(
+    data: DeliveryAckIn,
+    context=Depends(require_client_scope("delivery:write")),
+):
+    tenant_id, session, client = context
+    
+    stmt = select(DeliveryReceipt).where(
+        DeliveryReceipt.tenant_id == tenant_id,
+        DeliveryReceipt.pesagem_id.in_(data.weighing_ids)
+    )
+    result = await session.execute(stmt)
+    receipts = {r.pesagem_id: r for r in result.scalars()}
+    
+    missing_wids = [wid for wid in data.weighing_ids if wid not in receipts]
+    tombstones = {}
+    if missing_wids:
+        from app.models import DeliveryTombstone
+        stmt_t = select(DeliveryTombstone.pesagem_id).where(
+            DeliveryTombstone.tenant_id == tenant_id,
+            DeliveryTombstone.pesagem_id.in_(missing_wids)
+        )
+        result_t = await session.execute(stmt_t)
+        tombstones = set(result_t.scalars())
+        
+    ack_results = []
+    now = datetime.utcnow()
+    
+    for wid in data.weighing_ids:
+        r = receipts.get(wid)
+        if r:
+            if r.status == "ACKNOWLEDGED":
+                ack_results.append(DeliveryAckResult(weighing_id=wid, status="ALREADY_ACKNOWLEDGED"))
+            else:
+                r.status = "ACKNOWLEDGED"
+                r.acknowledged_at = now
+                r.acknowledged_by_api_client_id = client.id
+                ack_results.append(DeliveryAckResult(weighing_id=wid, status="ACKNOWLEDGED"))
+        elif wid in tombstones:
+            ack_results.append(DeliveryAckResult(weighing_id=wid, status="ALREADY_PURGED"))
+        else:
+            ack_results.append(DeliveryAckResult(weighing_id=wid, status="NOT_FOUND"))
+            
+    await session.commit()
+    
+    return DeliveryAckOut(results=ack_results)

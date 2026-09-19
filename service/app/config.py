@@ -33,6 +33,7 @@ class Settings(BaseSettings):
     allow_legacy_api_key: bool = False
     public_url: str = "http://localhost:3005"
     email_token_minutes: int = 30
+    delivery_retention_days: int = 30
 
     @model_validator(mode="after")
     def validate_production_secrets(self):

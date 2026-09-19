@@ -52,14 +52,57 @@ async def test_avulsa_sync_query_and_reconciliation_flow():
         assert activation.status_code == 200, activation.text
         installation_id = activation.json()["installation_id"]
         device_configuration_id = activation.json()["device_configuration_id"]
+        station_id = activation.json()["station_id"]
         station_headers = {
             "Authorization": f"Bearer {activation.json()['station_token']}",
         }
 
+        # Activate device configuration
+        response = await api.post("/v1/stations/device-configurations", headers=station_headers, json={
+            "installation_id": installation_id,
+            "bridge_url": "http://127.0.0.1:8321",
+        })
+        assert response.status_code == 201
+        device_configuration_id = response.json()["id"]
+        bridge_proof_key = response.json()["bridge_proof_key"]
+        
+        response = await api.post("/v1/stations/bridge-validations/challenge", headers=station_headers, json={
+            "device_configuration_id": device_configuration_id
+        })
+        challenge_id = response.json()["challenge_id"]
+        nonce = response.json()["nonce"]
+
+        async with async_sessionmaker(_engine, expire_on_commit=False)() as s:
+            from app.models import BridgeChallenge
+            from sqlalchemy import select
+            ch = (await s.execute(select(BridgeChallenge).where(BridgeChallenge.id == uuid.UUID(challenge_id)))).scalar_one()
+            expires_at = ch.expires_at.isoformat()
+
+        canonical_challenge = f"{challenge_id}|{nonce}|{station_id}|{installation_id}|{expires_at}"
+        import hmac, hashlib
+        proof = hmac.new(bridge_proof_key.encode(), canonical_challenge.encode(), hashlib.sha256).hexdigest()
+
+        response = await api.post("/v1/stations/bridge-validations", headers=station_headers, json={
+            "bridge_url": "http://127.0.0.1:8321",
+            "challenge_id": challenge_id,
+            "bridge_token_proof": proof,
+            "peso_kg": 100.0
+        })
+        assert response.status_code == 201
+
+        # Replenish offline authorizations
+        response = await api.post("/v1/stations/offline-authorizations/replenish", headers=station_headers, json={
+            "device_configuration_id": device_configuration_id,
+            "count": 2
+        })
+        assert response.status_code == 201
+        auth_id_1 = response.json()["items"][0]["id"]
+        auth_id_2 = response.json()["items"][1]["id"]
+
         capture_id = str(uuid.uuid4())
         pushed = await api.post(
             "/v1/stations/sync/push", headers=station_headers,
-            json={"items": [{"local_id": capture_id, "payload": {
+            json={"items": [{"local_id": capture_id, "authorization_id": auth_id_1, "payload": {
                 "ordem_id": None,
                 "installation_id": installation_id,
                 "device_configuration_id": device_configuration_id,
@@ -70,6 +113,7 @@ async def test_avulsa_sync_query_and_reconciliation_flow():
                 "direcao_veiculo": "ENTRADA",
                 "natureza_mercadoria": "ENTRADA",
                 "tipo_operacao": "RECEBIMENTO",
+                "authorization_id": auth_id_1,
                 "contexto": {
                     "cfop": "1101", "nota_fiscal": {"numero": "123"},
                     "veiculo": {"placa": "ABC1D23"}, "motorista": {"nome": "João"},
@@ -82,10 +126,11 @@ async def test_avulsa_sync_query_and_reconciliation_flow():
 
         second_capture = await api.post(
             "/v1/stations/sync/push", headers=station_headers,
-            json={"items": [{"local_id": str(uuid.uuid4()), "payload": {
+            json={"items": [{"local_id": str(uuid.uuid4()), "authorization_id": auth_id_2, "payload": {
                 "ordem_id": None, "etapa": "UNICA", "peso_aferido_kg": "8000.000",
                 "installation_id": installation_id,
                 "device_configuration_id": device_configuration_id,
+                "authorization_id": auth_id_2,
                 "peso_tara_kg": "500.000", "captured_via": "MANUAL",
                 "direcao_veiculo": "SAIDA", "natureza_mercadoria": "SAIDA",
                 "tipo_operacao": "EXPEDICAO", "contexto": {"cfop": "5101"},

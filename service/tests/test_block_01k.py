@@ -76,6 +76,17 @@ async def test_block_01_and_02_e2e():
         import hmac, hashlib
         proof = hmac.new(bridge_proof_key.encode(), canonical_challenge.encode(), hashlib.sha256).hexdigest()
 
+        # Test Fake Key
+        fake_key = "im_a_hacker"
+        fake_proof = hmac.new(fake_key.encode(), canonical_challenge.encode(), hashlib.sha256).hexdigest()
+        response = await client.post("/v1/stations/bridge-validations", headers=inst1_headers, json={
+            "bridge_url": "http://127.0.0.1:8321",
+            "challenge_id": challenge_id,
+            "bridge_token_proof": fake_proof,
+            "peso_kg": 100.0
+        })
+        assert response.status_code == 403 # Fake proof rejected
+
         # Submit Validation (Legitimate Proof)
         response = await client.post("/v1/stations/bridge-validations", headers=inst1_headers, json={
             "bridge_url": "http://127.0.0.1:8321",
@@ -85,7 +96,7 @@ async def test_block_01_and_02_e2e():
         })
         assert response.status_code == 201
         validation_id = response.json()["validation_id"]
-        
+
         # Test Replay
         response = await client.post("/v1/stations/bridge-validations", headers=inst1_headers, json={
             "bridge_url": "http://127.0.0.1:8321",
@@ -94,21 +105,6 @@ async def test_block_01_and_02_e2e():
             "peso_kg": 100.0
         })
         assert response.status_code == 422 # Replay rejected
-
-        # Test Fake Key
-        fake_key = "im_a_hacker"
-        fake_proof = hmac.new(fake_key.encode(), canonical_challenge.encode(), hashlib.sha256).hexdigest()
-        response = await client.post("/v1/stations/bridge-validations/challenge", headers=inst1_headers, json={
-            "device_configuration_id": dev_config_1_id
-        })
-        fake_chal_id = response.json()["challenge_id"]
-        response = await client.post("/v1/stations/bridge-validations", headers=inst1_headers, json={
-            "bridge_url": "http://127.0.0.1:8321",
-            "challenge_id": fake_chal_id,
-            "bridge_token_proof": fake_proof,
-            "peso_kg": 100.0
-        })
-        assert response.status_code == 422 # Fake proof rejected
 
         # BLOCK-01: Offline Capture Authorizations
         response = await client.post("/v1/stations/offline-authorizations/replenish", headers=inst1_headers, json={
