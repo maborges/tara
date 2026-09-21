@@ -3,12 +3,15 @@ import { db, getSession, type PesagemLocal } from "@/lib/db";
 const SCHEMA_VERSION = "balanca.contingency.v2" as const;
 
 interface ContingencyRecord {
+  operation_local_id: string | null;
   installation_id: string | null;
   device_configuration_id: string | null;
   local_id: string;
   ordem_id: string | null;
   subject_type: "VEICULO" | "ANIMAL" | null;
   tipo_pesagem: string | null;
+  natureza_operacao: string | null;
+  modalidade: string | null;
   etapa: string;
   numero_ticket: string | null;
   peso_informado_kg: string | null;
@@ -16,6 +19,9 @@ interface ContingencyRecord {
   peso_tara_kg: string | null;
   captured_via: "MANUAL" | "ELETRONICA";
   leitura_bruta: Record<string, unknown> | null;
+  direcao_veiculo: string | null;
+  finalidade: string | null;
+  metodo_medicao: string | null;
   data_pesagem: string | null;
   contexto: Record<string, unknown>;
 }
@@ -66,16 +72,20 @@ async function getIdentity() {
   return row;
 }
 
-function toRecord(item: PesagemLocal): ContingencyRecord {
+async function toRecord(item: PesagemLocal): Promise<ContingencyRecord> {
+  const operacao = item.operation_local_id ? await db.operacoes.get(item.operation_local_id) : undefined;
   return {
+    operation_local_id: item.operation_local_id ?? null,
     installation_id: item.installation_id ?? null,
     device_configuration_id: item.device_configuration_id ?? null,
     local_id: item.local_id, ordem_id: item.ordem_id, subject_type: item.subject_type,
-    tipo_pesagem: item.tipo_pesagem, etapa: item.etapa, numero_ticket: item.numero_ticket,
+    tipo_pesagem: item.tipo_pesagem, natureza_operacao: item.natureza_operacao ?? null, modalidade: item.modalidade ?? null,
+    etapa: item.etapa, numero_ticket: item.numero_ticket,
     peso_informado_kg: item.peso_informado_kg, peso_aferido_kg: item.peso_aferido_kg ?? "0",
     peso_tara_kg: item.peso_tara_kg, captured_via: item.captured_via,
-    leitura_bruta: item.leitura_bruta, data_pesagem: item.data_pesagem,
-    contexto: { placa: item.placa, motorista: item.motorista, animal_id: item.animal_id, pessoa_id: item.pessoa_id, operador_pessoa_id: item.operador_pessoa_id },
+    leitura_bruta: item.leitura_bruta, direcao_veiculo: item.direcao_veiculo ?? null,
+    finalidade: item.finalidade ?? null, metodo_medicao: item.metodo_medicao ?? null, data_pesagem: item.data_pesagem,
+    contexto: operacao?.contexto ?? { ...item.contexto, placa: item.placa, motorista: item.motorista, animal_id: item.animal_id, pessoa_id: item.pessoa_id, operador_pessoa_id: item.operador_pessoa_id },
   };
 }
 
@@ -83,7 +93,7 @@ export async function buildContingencyPackage(): Promise<Blob> {
   const session = await getSession();
   if (!session) throw new Error("Estação não ativada.");
   const identity = await getIdentity();
-  const records = (await db.pesagens.where("synced").equals(0).toArray()).map(toRecord);
+  const records = await Promise.all((await db.pesagens.where("synced").equals(0).toArray()).map(toRecord));
   if (records.length === 0) throw new Error("Não há pesagens pendentes para exportar.");
   const sequence = identity.sequence_number + 1;
   const packageData: Omit<ContingencyPackage, "signature"> = {

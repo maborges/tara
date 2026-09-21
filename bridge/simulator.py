@@ -20,7 +20,9 @@ async def handle_client(reader: asyncio.StreamReader, writer: asyncio.StreamWrit
     print(f"[simulator] cliente conectado: {peer}")
     try:
         while True:
-            variacao = random.uniform(-2.5, 2.5)
+            # Mantém a variação dentro da tolerância padrão de estabilidade da
+            # Bridge (0,5 kg), para que o botão "Usar peso" possa ser testado.
+            variacao = random.uniform(-0.2, 0.2)
             peso = max(0.0, peso_base + variacao)
             linha = f"ST,GS,+{peso:09.3f}kg\r\n"
             writer.write(linha.encode())

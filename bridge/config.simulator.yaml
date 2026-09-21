@@ -18,4 +18,6 @@ protocol:
 http_host: 127.0.0.1
 http_port: 8322
 stale_after_seconds: 5.0
+stable_readings: 3
+stable_tolerance_kg: 0.5
 api_token: null

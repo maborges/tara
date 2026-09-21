@@ -23,5 +23,11 @@
   "tests/test_weighing_calculation.py::test_weighing_dupla_saida_carregamento_expedicao",
   "tests/test_weighing_calculation.py::test_weighing_etapa_invalida_rejeitada",
   "tests/test_weighing_calculation.py::test_weighing_unica_com_tara_fornecida",
-  "tests/test_weighing_events.py::test_completed_weighing_outbox_contains_public_envelope_and_routing_fields"
+  "tests/test_weighing_events.py::test_completed_weighing_outbox_contains_public_envelope_and_routing_fields",
+  "tests/test_weighing_flow_foundation.py::test_legacy_stage_uniqueness_and_capture_immutability_remain_intact",
+  "tests/test_weighing_flow_foundation.py::test_n_capture_foundation_and_official_marks",
+  "tests/test_weighing_result_engine.py::test_expedição_requires_pos_greater_than_pre_and_inversion_is_rejected",
+  "tests/test_weighing_result_engine.py::test_missing_and_unsupported_nature_stay_pending_without_abs_fallback",
+  "tests/test_weighing_result_engine.py::test_multiple_official_captures_recompute_with_history_without_mutating_weights",
+  "tests/test_weighing_result_engine.py::test_recebimento_uses_only_official_pre_pos_and_auxiliary_deltas"
 ]

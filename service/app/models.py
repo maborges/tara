@@ -472,9 +472,12 @@ class Ordem(Base):
     sistema_cliente: Mapped[str] = mapped_column(String(80), nullable=False)
     tenant_cliente_id: Mapped[str] = mapped_column(String(120), nullable=False)
     referencia_externa: Mapped[str] = mapped_column(String(180), nullable=False)
+    operation_local_id: Mapped[str | None] = mapped_column(String(120), nullable=True)
     correlation_id: Mapped[str] = mapped_column(String(120), nullable=False)
     subject_type: Mapped[str] = mapped_column(String(20), nullable=False)
     tipo_pesagem: Mapped[str] = mapped_column(String(30), nullable=False)
+    natureza_operacao: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    modalidade: Mapped[str | None] = mapped_column(String(15), nullable=True)
     contexto: Mapped[dict] = mapped_column(JSONB, nullable=False)
     status: Mapped[str] = mapped_column(String(40), nullable=False)
     peso_liquido_kg: Mapped[Decimal | None] = mapped_column(Numeric(12, 3), nullable=True)
@@ -482,6 +485,12 @@ class Ordem(Base):
     peso_bruto_kg: Mapped[Decimal | None] = mapped_column(Numeric(12, 3), nullable=True)
     peso_tara_kg: Mapped[Decimal | None] = mapped_column(Numeric(12, 3), nullable=True)
     tara_source: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    resultado_status: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    resultado_motivo: Mapped[str | None] = mapped_column(Text, nullable=True)
+    resultado_versao: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    resultado_calculado_em: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    delta_pre_operacao_kg: Mapped[Decimal | None] = mapped_column(Numeric(12, 3), nullable=True)
+    delta_pos_operacao_kg: Mapped[Decimal | None] = mapped_column(Numeric(12, 3), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
     concluida_em: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
@@ -490,7 +499,6 @@ class Pesagem(Base):
     __tablename__ = "pesagens"
     __table_args__ = (
         UniqueConstraint("tenant_id", "local_id", name="uq_TARA_pesagens_local"),
-        UniqueConstraint("ordem_id", "etapa", name="uq_TARA_pesagens_ordem_etapa"),
         {"schema": "tara", "comment": "Registro imutável de uma medição realizada na balança, vinculada ou avulsa, com suas evidências."},
     )
 
@@ -513,7 +521,49 @@ class Pesagem(Base):
     direcao_veiculo: Mapped[str | None] = mapped_column(String(10), nullable=True)
     natureza_mercadoria: Mapped[str | None] = mapped_column(String(10), nullable=True)
     tipo_operacao: Mapped[str | None] = mapped_column(String(60), nullable=True)
+    finalidade: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    metodo_medicao: Mapped[str | None] = mapped_column(String(20), nullable=True)
     contexto: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+
+
+class MarcoPesagemOficial(Base):
+    __tablename__ = "pesagem_marcos_oficiais"
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "ordem_id", "etapa", name="uq_TARA_marco_oficial_ordem_etapa"),
+        {"schema": "tara", "comment": "Marco oficial de uma operação; não altera a captura física imutável."},
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
+    tenant_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    ordem_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("tara.ordens.id", ondelete="CASCADE"), nullable=False)
+    pesagem_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("tara.pesagens.id", ondelete="CASCADE"), nullable=False)
+    etapa: Mapped[str] = mapped_column(String(30), nullable=False)
+    decidido_em: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    operador_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("tara.operadores.id"), nullable=True)
+
+
+class OrdemResultadoHistorico(Base):
+    __tablename__ = "ordem_resultados_historico"
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "ordem_id", "versao", name="uq_TARA_ordem_resultado_versao"),
+        {"schema": "tara", "comment": "Histórico imutável das recomputações de resultado por marcos oficiais."},
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
+    tenant_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    ordem_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("tara.ordens.id", ondelete="CASCADE"), nullable=False)
+    versao: Mapped[int] = mapped_column(Integer, nullable=False)
+    status: Mapped[str] = mapped_column(String(30), nullable=False)
+    motivo: Mapped[str | None] = mapped_column(Text, nullable=True)
+    marco_pre_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("tara.pesagem_marcos_oficiais.id"), nullable=True)
+    marco_pos_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("tara.pesagem_marcos_oficiais.id"), nullable=True)
+    peso_bruto_kg: Mapped[Decimal | None] = mapped_column(Numeric(12, 3), nullable=True)
+    peso_tara_kg: Mapped[Decimal | None] = mapped_column(Numeric(12, 3), nullable=True)
+    peso_liquido_kg: Mapped[Decimal | None] = mapped_column(Numeric(12, 3), nullable=True)
+    tara_source: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    delta_pre_operacao_kg: Mapped[Decimal | None] = mapped_column(Numeric(12, 3), nullable=True)
+    delta_pos_operacao_kg: Mapped[Decimal | None] = mapped_column(Numeric(12, 3), nullable=True)
+    calculado_em: Mapped[datetime] = mapped_column(DateTime, nullable=False)
 
 
 class ContingenciaLote(Base):

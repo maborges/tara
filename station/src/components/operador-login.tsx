@@ -82,44 +82,48 @@ export function OperadorLogin({ deviceId, onLogin }: OperadorLoginProps) {
   if (operadorId) {
     const operador = operadores?.find((o) => o.id === operadorId);
     return (
-      <main className="flex min-h-screen items-center justify-center p-6 bg-muted/30">
-        <Card className="w-full max-w-sm">
+      <main className="flex min-h-screen items-center justify-center p-6 animated-gradient-bg">
+        <Card className="w-full max-w-sm glass-panel-heavy border-0">
           <form onSubmit={handleLogin}>
-            <CardHeader>
+            <CardHeader className="pt-8">
               <div className="mb-4">
-                <Button variant="ghost" size="sm" className="h-auto p-0 text-muted-foreground hover:text-foreground" onClick={() => setOperadorId(null)}>
-                  &larr; Trocar operador
+                <Button variant="ghost" size="sm" className="h-auto p-0 text-muted-foreground hover:text-foreground hover:bg-transparent" onClick={() => setOperadorId(null)}>
+                  &larr; Voltar
                 </Button>
               </div>
-              <CardTitle>Olá, {operador?.nome_exibicao}</CardTitle>
-              <CardDescription>Digite seu PIN pessoal para começar a pesar.</CardDescription>
+              <CardTitle className="text-3xl font-bold tracking-tight">Olá, {operador?.nome_exibicao}</CardTitle>
+              <CardDescription className="text-base text-foreground/70">Digite seu PIN pessoal para começar a operar.</CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4">
+            <CardContent className="space-y-6 pb-8">
               <Input
                 type="password"
                 inputMode="numeric"
                 autoFocus
-                className="text-center text-2xl tracking-widest py-6"
+                className="text-center text-3xl tracking-[0.5em] h-16 bg-background/50 focus:bg-background transition-colors focus:ring-primary/50"
                 value={pin}
                 onChange={(e) => setPin(e.target.value)}
                 placeholder="••••"
                 required
               />
-              {erroLogin && <p className="text-sm font-medium text-destructive">{erroLogin}</p>}
+              {erroLogin && (
+                <div className="rounded-md bg-destructive/10 p-3 text-sm font-medium text-destructive border border-destructive/20 text-center animate-in fade-in slide-in-from-top-2">
+                  {erroLogin}
+                </div>
+              )}
               <Button
                 type="submit"
-                className="w-full py-6 text-lg"
+                className="w-full h-14 text-lg font-bold shadow-lg hover:shadow-primary/25 transition-all active:scale-[0.98] bg-gradient-to-r from-primary to-primary/80 hover:to-primary"
                 disabled={entrando || pin.length < 4}
               >
-                {entrando ? "Entrando..." : "Entrar"}
+                {entrando ? "Entrando..." : "Entrar na Estação"}
               </Button>
-              <button type="button" className="w-full text-sm text-muted-foreground underline" onClick={() => { setRecuperando(true); setErroLogin(null); }}>
+              <button type="button" className="w-full text-sm text-muted-foreground hover:text-foreground transition-colors" onClick={() => { setRecuperando(true); setErroLogin(null); }}>
                 Usar credencial de recuperação da estação
               </button>
-              {recuperando && <form onSubmit={handleRecovery} className="space-y-2 border-t pt-3">
-                <Input type="password" value={recoverySecret} onChange={(e) => setRecoverySecret(e.target.value)} placeholder="Credencial da estação" required />
-                <Input type="password" value={newPin} onChange={(e) => setNewPin(e.target.value)} placeholder="Nova senha pessoal" minLength={4} required />
-                <Button type="submit" variant="outline" className="w-full">Redefinir offline</Button>
+              {recuperando && <form onSubmit={handleRecovery} className="space-y-3 border-t border-border pt-4 animate-in fade-in slide-in-from-top-2">
+                <Input type="password" value={recoverySecret} onChange={(e) => setRecoverySecret(e.target.value)} placeholder="Credencial da estação" required className="h-12 bg-background/50" />
+                <Input type="password" value={newPin} onChange={(e) => setNewPin(e.target.value)} placeholder="Nova senha pessoal" minLength={4} required className="h-12 bg-background/50" />
+                <Button type="submit" variant="outline" className="w-full h-12 bg-background/50">Redefinir offline</Button>
               </form>}
             </CardContent>
           </form>
@@ -129,31 +133,38 @@ export function OperadorLogin({ deviceId, onLogin }: OperadorLoginProps) {
   }
 
   return (
-    <main className="flex min-h-screen items-center justify-center p-6 bg-muted/30">
-      <Card className="w-full max-w-sm">
-        <CardHeader>
-          <CardTitle>Quem está pesando?</CardTitle>
-          <CardDescription>
-            Selecione seu nome. Se você não aparecer na lista, peça ao administrador para cadastrá-lo.
+    <main className="flex min-h-screen items-center justify-center p-6 animated-gradient-bg">
+      <Card className="w-full max-w-sm glass-panel-heavy border-0">
+        <CardHeader className="pt-8">
+          <CardTitle className="text-3xl font-bold tracking-tight">Quem está pesando?</CardTitle>
+          <CardDescription className="text-base text-foreground/70">
+            Selecione seu nome para iniciar o turno de operação.
           </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-4">
-          {erroLista && <p className="text-sm font-medium text-destructive">{erroLista}</p>}
-          {operadores === null && !erroLista && <p className="text-sm text-muted-foreground">Carregando...</p>}
+        <CardContent className="space-y-5 pb-8">
+          {erroLista && (
+             <div className="rounded-md bg-destructive/10 p-3 text-sm font-medium text-destructive border border-destructive/20 text-center animate-in fade-in">
+               {erroLista}
+             </div>
+          )}
+          {operadores === null && !erroLista && (
+            <div className="flex justify-center py-6">
+              <div className="animate-pulse-ring size-8 rounded-full border-2 border-primary"></div>
+            </div>
+          )}
           {operadores?.length === 0 && (
-            <p className="text-sm text-muted-foreground">Nenhum operador cadastrado para esta fazenda ainda.</p>
+            <p className="text-sm text-muted-foreground text-center bg-background/50 p-4 rounded-lg border border-border">Nenhum operador cadastrado para esta unidade ainda.</p>
           )}
 
-          <ul className="space-y-2">
+          <ul className="space-y-3">
             {operadores?.map((op) => (
               <li key={op.id}>
-                <Button
-                  variant="outline"
-                  className="w-full justify-start font-normal h-12"
+                <button
+                  className="w-full h-16 px-5 text-left font-semibold text-lg bg-background/50 border border-border/50 rounded-xl hover:bg-card hover:shadow-lg hover:-translate-y-0.5 hover:border-primary/30 transition-all active:scale-[0.98]"
                   onClick={() => setOperadorId(op.id)}
                 >
                   {op.nome_exibicao}
-                </Button>
+                </button>
               </li>
             ))}
           </ul>

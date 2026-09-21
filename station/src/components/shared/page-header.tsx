@@ -51,9 +51,9 @@ export function PageHeader({
             ))}
           </nav>
         )}
-        <h1 className="flex items-center gap-3 text-balance text-3xl font-light leading-tight text-foreground">
+        <h1 className="flex items-center gap-3 text-balance text-3xl font-bold tracking-tight text-foreground">
           {icon && (
-            <span className="inline-flex shrink-0 text-primary bg-primary/10 p-2 rounded-sm border border-primary/20 shadow-sm ring-1 ring-primary/10">
+            <span className="inline-flex shrink-0 text-primary bg-gradient-to-br from-primary/20 to-primary/5 p-2.5 rounded-xl border border-primary/20 shadow-[0_0_15px_rgba(var(--color-primary),0.2)] backdrop-blur-sm transition-transform hover:scale-105">
               {icon}
             </span>
           )}

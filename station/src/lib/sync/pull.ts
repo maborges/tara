@@ -52,9 +52,26 @@ export async function pullSync(): Promise<{ ok: boolean; error?: string }> {
         }
     }
 
-    await db.transaction("rw", db.ordens, db.animais, db.operadores, db.offline_auths, async () => {
+    await db.transaction("rw", db.ordens, db.operacoes, db.animais, db.operadores, db.offline_auths, async () => {
       for (const ordem of data.ordens_pendentes) {
         await db.ordens.put(ordem);
+        const mappedOperations = await db.operacoes.where("ordem_id").equals(ordem.id).toArray();
+        for (const operacao of mappedOperations) {
+          await db.operacoes.update(operacao.operation_local_id, {
+            natureza_operacao: ordem.natureza_operacao,
+            modalidade: ordem.modalidade,
+            peso_bruto_kg: ordem.peso_bruto_kg,
+            peso_tara_kg: ordem.peso_tara_kg,
+            peso_liquido_kg: ordem.peso_liquido_kg,
+            tara_source: ordem.tara_source,
+            resultado_status: ordem.resultado_status,
+            resultado_motivo: ordem.resultado_motivo,
+            delta_pre_operacao_kg: ordem.delta_pre_operacao_kg,
+            delta_pos_operacao_kg: ordem.delta_pos_operacao_kg,
+            status_local: ordem.status === "CONCLUIDA" ? "CONCLUIDA" : operacao.status_local,
+            updated_at: new Date().toISOString(),
+          });
+        }
       }
       for (const id of data.tombstones.ordens) {
         await db.ordens.delete(id);

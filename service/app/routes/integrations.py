@@ -12,7 +12,7 @@ from ..config import get_settings
 from ..models import ApiClient, Cliente, Conta, DeliveryReceipt, Estacao, EstacaoInstalacao, EstacaoOperador, DeviceConfiguration, BridgeValidation, Operador, Ordem, Outbox, OutboxReplayAudit, Pesagem
 from ..schemas import (
     ActivationIn, ActivationOut, AccountOut, ClientIn, ClientOut, EventOut, EventReplayAuditOut, OperatorIn, OperatorOut, ProvisionedOperatorOut, StationProvisioningOut,
-    OrderIn, OrderOut, OrderPageOut, StationIn, StationOut, WeighingIn, WeighingOut, WeighingPageOut, WeighingReconciliationIn,
+    OrderIn, OrderOut, OrderPageOut, StationIn, StationOut, WeighingIn, WeighingOut, WeighingPageOut, WeighingReconciliationIn, OfficialMarkIn, OfficialMarkOut, OrderResultHistoryOut,
     SyncPushIn, SyncPushOut, SyncResultOut, OperatorLoginIn, LoginIn, LoginOut,
     ApiClientIn, ApiClientUpdateIn, ApiClientOut, ApiClientCredentialOut, ApiClientStatusOut, ApiClientListOut,
     ContingencyPackageIn, ContingencyImportOut,
@@ -24,7 +24,7 @@ from .. import models
 from ..contingency_service import import_contingency_package
 from ..operation import (
     activate_station, complete_weighing, create_operator, create_order, create_station,
-    register_client, reconcile_weighing,
+    register_client, reconcile_weighing, resolve_offline_operation, set_official_mark, list_official_marks, list_result_history,
 )
 from ..platform_identity import (
     create_api_client, get_account, login_backoffice, login_backoffice_without_tenant,
@@ -263,6 +263,74 @@ async def get_admin_orders(
         stmt = stmt.where(Ordem.status == status.upper())
     result = await session.execute(stmt.order_by(Ordem.created_at.desc()).limit(500))
     return list(result.scalars())
+
+
+@router.get("/admin/orders/{order_id}/official-marks", response_model=list[OfficialMarkOut])
+async def get_admin_official_marks(
+    order_id: uuid.UUID,
+    context=Depends(require_backoffice("backoffice:pesagens:consultar")),
+):
+    tenant_id, session, _user = context
+    return await list_official_marks(session, tenant_id, order_id)
+
+
+@router.get("/orders/{order_id}/official-marks", response_model=list[OfficialMarkOut])
+async def get_official_marks(
+    order_id: uuid.UUID,
+    context=Depends(require_client_scope("weighings:read")),
+):
+    tenant_id, session, _client = context
+    return await list_official_marks(session, tenant_id, order_id)
+
+
+@router.post("/admin/orders/{order_id}/official-marks", response_model=OfficialMarkOut)
+async def post_admin_official_mark(
+    order_id: uuid.UUID,
+    data: OfficialMarkIn,
+    context=Depends(require_backoffice("backoffice:pesagens:importar")),
+):
+    tenant_id, session, _user = context
+    try:
+        mark = await set_official_mark(session, tenant_id, order_id, data)
+    except ValueError as exc:
+        await session.rollback()
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    await session.commit()
+    return mark
+
+
+@router.post("/orders/{order_id}/official-marks", response_model=OfficialMarkOut)
+async def post_official_mark(
+    order_id: uuid.UUID,
+    data: OfficialMarkIn,
+    context=Depends(require_client_scope("weighings:reconcile")),
+):
+    tenant_id, session, _client = context
+    try:
+        mark = await set_official_mark(session, tenant_id, order_id, data)
+    except ValueError as exc:
+        await session.rollback()
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    await session.commit()
+    return mark
+
+
+@router.get("/orders/{order_id}/result-history", response_model=list[OrderResultHistoryOut])
+async def get_result_history(
+    order_id: uuid.UUID,
+    context=Depends(require_client_scope("weighings:read")),
+):
+    tenant_id, session, _client = context
+    return await list_result_history(session, tenant_id, order_id)
+
+
+@router.get("/admin/orders/{order_id}/result-history", response_model=list[OrderResultHistoryOut])
+async def get_admin_result_history(
+    order_id: uuid.UUID,
+    context=Depends(require_backoffice("backoffice:pesagens:consultar")),
+):
+    tenant_id, session, _user = context
+    return await list_result_history(session, tenant_id, order_id)
 
 
 @router.get("/weighings", response_model=WeighingPageOut)
@@ -786,6 +854,23 @@ async def post_weighing(data: WeighingIn, context=Depends(require_station)):
     return weight
 
 
+@router.post("/stations/orders/{order_id}/official-marks", response_model=OfficialMarkOut)
+async def post_station_official_mark(
+    order_id: uuid.UUID,
+    data: OfficialMarkIn,
+    context=Depends(require_station),
+):
+    """Station-scoped explicit replacement of an official capture mark."""
+    tenant_id, session, _station = context
+    try:
+        mark = await set_official_mark(session, tenant_id, order_id, data)
+    except ValueError as exc:
+        await session.rollback()
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    await session.commit()
+    return mark
+
+
 @router.post("/stations/sync/push", response_model=SyncPushOut)
 async def post_sync(data: SyncPushIn, context=Depends(require_station)):
     tenant_id, session, station = context
@@ -813,14 +898,32 @@ async def post_sync(data: SyncPushIn, context=Depends(require_station)):
             
             if not auth:
                 raise ValueError("Autorização de captura inválida ou não pertence a esta instalação")
+            # Reject invalid/replayed credits before resolving or creating an
+            # Order. This keeps an invalid capture from leaving an orphan
+            # canonical operation in the transaction.
+            if auth.status == "CONSUMED" and auth.consumed_by_local_id != item.local_id:
+                raise ValueError("Autorização já consumida por outra pesagem (replay detectado)")
+            if auth.status != "CONSUMED" and auth.expires_at < datetime.utcnow():
+                raise ValueError("Autorização expirada")
+
+            offline_operation = None
+            resolved_order = None
+            operation_local_id = None
+            if payload.get("operacao") is not None:
+                offline_operation = schemas.OfflineOperationIn.model_validate(payload["operacao"])
+                operation_local_id = offline_operation.operation_local_id
+                resolved_order, conflict = await resolve_offline_operation(session, tenant_id, offline_operation)
+                if conflict:
+                    results.append(SyncResultOut(
+                        local_id=item.local_id, status="CONFLICT", error_message=conflict,
+                        operation_local_id=operation_local_id,
+                    ))
+                    continue
                 
             if auth.status == "CONSUMED":
-                if auth.consumed_by_local_id != item.local_id:
-                    raise ValueError("Autorização já consumida por outra pesagem (replay detectado)")
                 # Idempotência: já consumida pelo MESMO local_id é aceita
+                pass
             else:
-                if auth.expires_at < datetime.utcnow():
-                    raise ValueError("Autorização expirada")
                 auth.status = "CONSUMED"
                 auth.consumed_by_local_id = item.local_id
                 auth.consumed_at = datetime.utcnow()
@@ -832,7 +935,7 @@ async def post_sync(data: SyncPushIn, context=Depends(require_station)):
                     estacao_id=station.id,
                     installation_id=payload.get("installation_id"),
                     device_configuration_id=payload.get("device_configuration_id"),
-                    ordem_id=payload.get("ordem_id"),
+                    ordem_id=str(resolved_order.id) if resolved_order else payload.get("ordem_id"),
                     client_system=payload.get("client_system"),
                     client_tenant_id=payload.get("client_tenant_id"),
                     subject_type=payload.get("subject_type"),
@@ -849,10 +952,18 @@ async def post_sync(data: SyncPushIn, context=Depends(require_station)):
                     direcao_veiculo=payload.get("direcao_veiculo"),
                     natureza_mercadoria=payload.get("natureza_mercadoria"),
                     tipo_operacao=payload.get("tipo_operacao"),
-                    contexto=payload.get("contexto", {}),
+                    finalidade=payload.get("finalidade"),
+                    metodo_medicao=payload.get("metodo_medicao"),
+                    # Snapshot imutável da captura. Para operação local a
+                    # Ordem já contém o contexto validado/canônico.
+                    contexto=dict(resolved_order.contexto) if resolved_order else payload.get("contexto", {}),
                 ),
             )
-            results.append(SyncResultOut(local_id=item.local_id, status="CREATED", server_id=weight.id))
+            results.append(SyncResultOut(
+                local_id=item.local_id, status="CREATED", server_id=weight.id,
+                operation_local_id=operation_local_id,
+                ordem_id=resolved_order.id if resolved_order else weight.ordem_id,
+            ))
         except (KeyError, ValueError) as exc:
             results.append(SyncResultOut(local_id=item.local_id, status="ERROR", error_message=str(exc)))
     await session.commit()
@@ -866,29 +977,55 @@ async def get_sync(context=Depends(require_station)):
     if installation.status != "ACTIVE":
         raise HTTPException(status_code=403, detail="Instalação substituída não pode receber novas ordens")
     result = await session.execute(
-        select(Ordem).where(Ordem.tenant_id == tenant_id, Ordem.status == "PENDENTE")
-        .order_by(Ordem.created_at)
-        .limit(500)
+        select(Ordem).where(
+            Ordem.tenant_id == tenant_id,
+            or_(
+                Ordem.status.in_(["PENDENTE", "EM_PESAGEM"]),
+                and_(Ordem.modalidade == "MULTIPLA", Ordem.status == "CONCLUIDA"),
+            ),
+        ).order_by(Ordem.created_at).limit(500)
     )
+    order_objects = list(result.scalars())
+
+    etapas_por_ordem = {}
+    if order_objects:
+        pesagens_result = await session.execute(
+            select(Pesagem.ordem_id, Pesagem.etapa)
+            .where(Pesagem.ordem_id.in_([o.id for o in order_objects]))
+        )
+        for ordem_id, etapa in pesagens_result:
+            etapas_por_ordem.setdefault(ordem_id, []).append(etapa)
+
     orders = [
         {
             "id": str(order.id),
             "origem_tipo": "OUTRO",
             "origem_id": None,
+            "referencia_externa": order.referencia_externa,
             "subject_type": order.subject_type,
             "tipo_pesagem": order.tipo_pesagem,
+            "natureza_operacao": order.natureza_operacao,
+            "modalidade": order.modalidade,
             "contexto": order.contexto,
             "status": order.status,
+            "peso_bruto_kg": str(order.peso_bruto_kg) if order.peso_bruto_kg is not None else None,
+            "peso_tara_kg": str(order.peso_tara_kg) if order.peso_tara_kg is not None else None,
+            "peso_liquido_kg": str(order.peso_liquido_kg) if order.peso_liquido_kg is not None else None,
+            "tara_source": order.tara_source,
+            "resultado_status": order.resultado_status,
+            "resultado_motivo": order.resultado_motivo,
+            "delta_pre_operacao_kg": str(order.delta_pre_operacao_kg) if order.delta_pre_operacao_kg is not None else None,
+            "delta_pos_operacao_kg": str(order.delta_pos_operacao_kg) if order.delta_pos_operacao_kg is not None else None,
             "produto_id": None,
             "produto_tipo": None,
             "tipo_volume": None,
             "quantidade_volumes": None,
             "data_agendada": None,
             "numero_documento_fiscal": None,
-            "etapas_realizadas": [],
+            "etapas_realizadas": etapas_por_ordem.get(order.id, []),
             "created_at": order.created_at.isoformat(),
         }
-        for order in result.scalars()
+        for order in order_objects
     ]
     return {
         "sync_at": datetime.utcnow().isoformat(),

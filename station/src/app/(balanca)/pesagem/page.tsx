@@ -9,16 +9,24 @@ import {
   clearSession,
   setBridgeConfig,
   etapasFeitas,
+  etapasFeitasOperacao,
   proximaEtapa,
   getOperadorSessao,
   clearOperadorSessao,
   retryFailedSync,
+  acoesMultipla,
   ETAPA_LABEL,
   ETAPAS_POR_TIPO_PESAGEM,
   type OrdemPendenteLocal,
   type Etapa,
+  type TipoPesagem,
   type AnimalLocal,
+  type OperacaoLocal,
+  type FinalidadeCaptura,
+  type MetodoMedicao,
+  type NaturezaOperacao,
 } from "@/lib/db";
+import { apiFetch } from "@/lib/api";
 import { enqueuePesagem } from "@/lib/sync/push";
 import { startSyncLoop, runSyncCycle } from "@/lib/sync/trigger";
 import { usePesoAoVivo } from "@/lib/bridge/peso-ao-vivo";
@@ -28,7 +36,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { PageHeader } from "@/components/shared/page-header";
-import { Activity, Gauge } from "lucide-react";
+import { Activity, Gauge, Search } from "lucide-react";
 
 type SubjectType = "VEICULO" | "ANIMAL";
 
@@ -46,10 +54,48 @@ export default function PesagemPage() {
 
   const session = useLiveQuery(getSession);
   const operadorSessao = useLiveQuery(getOperadorSessao);
+  const [tabAtual, setTabAtual] = useState<"PENDENTES" | "CONCLUIDAS">("PENDENTES");
+  const [buscaOrdem, setBuscaOrdem] = useState("");
+
   const ordens = useLiveQuery(
-    () => db.ordens.where("status").anyOf(["PENDENTE", "EM_PESAGEM"]).toArray(),
-    [],
+    () => {
+      const statusArray = tabAtual === "PENDENTES" ? ["PENDENTE", "EM_PESAGEM"] : ["CONCLUIDA"];
+      return db.ordens.where("status").anyOf(statusArray).reverse().toArray();
+    },
+    [tabAtual],
   );
+  const operacoesLocais = useLiveQuery(
+    () => db.operacoes.where("status_local").anyOf(["PENDENTE_SYNC", "MAPEADA", "EM_PESAGEM", "CONCLUIDA"]).reverse().toArray(),
+    [],
+    [] as OperacaoLocal[],
+  );
+
+  const ordensFiltradas = useMemo(() => {
+    if (!ordens) return [];
+    const termo = buscaOrdem.trim().toLowerCase().replace(/-/g, "");
+    if (!termo) return ordens;
+    return ordens.filter(o => {
+      const veiculo = o.contexto?.veiculo as { placa_cavalo?: string; carretas?: { placa?: string }[] } | undefined;
+      const placa = (typeof o.contexto?.placa === "string" ? o.contexto.placa : veiculo?.placa_cavalo ?? "").toLowerCase().replace(/-/g, "");
+      const carretas = veiculo?.carretas?.some((carreta) => (carreta.placa ?? "").toLowerCase().replace(/-/g, "").includes(termo)) ?? false;
+      const ref = (o.referencia_externa || "").toLowerCase().replace(/-/g, "");
+      const nf = (o.numero_documento_fiscal || "").toLowerCase().replace(/-/g, "");
+      return placa.includes(termo) || carretas || ref.includes(termo) || nf.includes(termo);
+    });
+  }, [ordens, buscaOrdem]);
+  const operacoesFiltradas = useMemo(() => {
+    const termo = buscaOrdem.trim().toLowerCase().replace(/-/g, "");
+    if (!termo) return operacoesLocais;
+    return operacoesLocais.filter((operacao) => {
+      const veiculo = operacao.contexto.veiculo as { placa_cavalo?: string; carretas?: { placa?: string }[] } | undefined;
+      const cavalo = (veiculo?.placa_cavalo ?? "").toLowerCase().replace(/-/g, "");
+      const carreta = veiculo?.carretas?.some((item) => (item.placa ?? "").toLowerCase().replace(/-/g, "").includes(termo)) ?? false;
+      return operacao.processo.referencia.toLowerCase().replace(/-/g, "").includes(termo)
+        || operacao.referencia_externa.toLowerCase().replace(/-/g, "").includes(termo)
+        || cavalo.includes(termo) || carreta;
+    });
+  }, [operacoesLocais, buscaOrdem]);
+
   const falhasSync = useLiveQuery(() => db.sync_queue.where("status").equals("FAILED").count(), []);
 
   useEffect(() => {
@@ -63,6 +109,7 @@ export default function PesagemPage() {
   }, []);
 
   const [ordemSelecionadaId, setOrdemSelecionadaId] = useState<string | null>(null);
+  const [operacaoSelecionadaId, setOperacaoSelecionadaId] = useState<string | null>(null);
   const ordemSelecionada = useMemo(
     () => ordens?.find((o) => o.id === ordemSelecionadaId) ?? null,
     [ordens, ordemSelecionadaId],
@@ -71,6 +118,23 @@ export default function PesagemPage() {
   const etapasJaFeitas = useLiveQuery(
     () => (ordemSelecionada ? etapasFeitas(ordemSelecionada) : Promise.resolve([] as Etapa[])),
     [ordemSelecionada],
+  );
+  const operacaoSelecionada = useMemo(
+    () => operacoesLocais.find((operacao) => operacao.operation_local_id === operacaoSelecionadaId) ?? null,
+    [operacoesLocais, operacaoSelecionadaId],
+  );
+  const etapasOperacao = useLiveQuery(
+    () => operacaoSelecionada ? etapasFeitasOperacao(operacaoSelecionada) : Promise.resolve([] as Etapa[]),
+    [operacaoSelecionada],
+  );
+  const capturasSelecionadas = useLiveQuery(
+    async () => {
+      if (ordemSelecionada) return db.pesagens.where("ordem_id").equals(ordemSelecionada.id).sortBy("client_created_at");
+      if (operacaoSelecionada) return db.pesagens.where("operation_local_id").equals(operacaoSelecionada.operation_local_id).sortBy("client_created_at");
+      return [];
+    },
+    [ordemSelecionada, operacaoSelecionada],
+    [],
   );
 
   const [animalSelecionado, setAnimalSelecionado] = useState<AnimalLocal | null>(null);
@@ -102,9 +166,21 @@ export default function PesagemPage() {
   // sombra criada no servidor para anexar a segunda etapa — só disponível
   // depois de sincronizar, o que a captura avulsa (offline) não garante.
   const [avulsaConfig, setAvulsaConfig] = useState<{ subject_type: SubjectType } | null>(null);
+  const [processoTipo, setProcessoTipo] = useState("ROMANEIO");
+  const [processoReferencia, setProcessoReferencia] = useState("");
+  const [tipoPesagemNova, setTipoPesagemNova] = useState<TipoPesagem>("UNICA");
+  const [naturezaOperacaoNova, setNaturezaOperacaoNova] = useState<NaturezaOperacao>("RECEBIMENTO");
+  const [etapaMultiplaSelecionada, setEtapaMultiplaSelecionada] = useState<Etapa | null>(null);
+  const [finalidadeCaptura, setFinalidadeCaptura] = useState<FinalidadeCaptura>("OPERACIONAL");
+  const [metodoMedicao, setMetodoMedicao] = useState<MetodoMedicao>("ESTATICA");
+  const [placasCarretas, setPlacasCarretas] = useState<string[]>([]);
+  const [motoristaNome, setMotoristaNome] = useState("");
+  const [motoristaDocumentoTipo, setMotoristaDocumentoTipo] = useState("CNH");
+  const [motoristaDocumentoNumero, setMotoristaDocumentoNumero] = useState("");
 
   const [pesoAferido, setPesoAferido] = useState("");
   const [pesoInformado, setPesoInformado] = useState("");
+  const [direcaoVeiculo, setDirecaoVeiculo] = useState<"ENTRADA" | "INTERNA" | "SAIDA">("ENTRADA");
   const [placa, setPlaca] = useState("");
   const [ticketOrdemId, setTicketOrdemId] = useState<string | null>(null);
   const [baixandoTicket, setBaixandoTicket] = useState(false);
@@ -127,21 +203,40 @@ export default function PesagemPage() {
     return <OperadorLogin deviceId={session.device_id} onLogin={() => window.location.reload()} />;
   }
 
-  const emCaptura = !!ordemSelecionada || !!avulsaConfig;
-  const tipoPesagemAtivo = ordemSelecionada?.tipo_pesagem ?? "UNICA";
+  const emCaptura = !!ordemSelecionada || !!operacaoSelecionada || !!avulsaConfig;
+  const tipoPesagemAtivo = ordemSelecionada?.tipo_pesagem ?? operacaoSelecionada?.tipo_pesagem ?? tipoPesagemNova;
+  const capturasParaFluxo = capturasSelecionadas ?? [];
+  const acoesAtuais = tipoPesagemAtivo === "MULTIPLA" ? acoesMultipla(capturasParaFluxo) : [];
   const etapaAtual: Etapa | null = ordemSelecionada
-    ? proximaEtapa(tipoPesagemAtivo, etapasJaFeitas ?? [])
-    : avulsaConfig
-      ? "UNICA"
+    ? tipoPesagemAtivo === "MULTIPLA"
+      ? (etapaMultiplaSelecionada && acoesAtuais.includes(etapaMultiplaSelecionada) ? etapaMultiplaSelecionada : acoesAtuais[0] ?? null)
+      : proximaEtapa(tipoPesagemAtivo, etapasJaFeitas ?? [])
+    : operacaoSelecionada
+      ? tipoPesagemAtivo === "MULTIPLA"
+        ? (etapaMultiplaSelecionada && acoesAtuais.includes(etapaMultiplaSelecionada) ? etapaMultiplaSelecionada : acoesAtuais[0] ?? null)
+        : proximaEtapa(tipoPesagemAtivo, etapasOperacao ?? [])
+      : avulsaConfig
+        ? tipoPesagemNova === "MULTIPLA"
+          ? (etapaMultiplaSelecionada && acoesAtuais.includes(etapaMultiplaSelecionada) ? etapaMultiplaSelecionada : acoesAtuais[0] ?? null)
+          : proximaEtapa(tipoPesagemNova, [])
       : null;
-  const subjectTypeAtivo = ordemSelecionada?.subject_type ?? avulsaConfig?.subject_type ?? null;
+  const subjectTypeAtivo = ordemSelecionada?.subject_type ?? operacaoSelecionada?.subject_type ?? avulsaConfig?.subject_type ?? null;
   const origemLabel = ordemSelecionada?.origem_tipo ?? "AVULSA";
+  const naturezaAtiva = ordemSelecionada?.natureza_operacao ?? operacaoSelecionada?.natureza_operacao ?? (avulsaConfig ? naturezaOperacaoNova : null);
+  const finalidadeEfetiva: FinalidadeCaptura = tipoPesagemAtivo === "MULTIPLA" && etapaAtual && capturasParaFluxo.some((captura) => captura.etapa === etapaAtual)
+    ? (finalidadeCaptura === "OPERACIONAL" ? "CONFERENCIA" : finalidadeCaptura)
+    : finalidadeCaptura;
 
   function voltarParaLista() {
     setOrdemSelecionadaId(null);
+    setOperacaoSelecionadaId(null);
     setAvulsaConfig(null);
     setPesoAferido("");
     setPesoInformado("");
+    setDirecaoVeiculo("ENTRADA");
+    setEtapaMultiplaSelecionada(null);
+    setFinalidadeCaptura("OPERACIONAL");
+    setMetodoMedicao("ESTATICA");
     setPlaca("");
     setAnimalSelecionado(null);
     setBuscaAnimal("");
@@ -197,9 +292,31 @@ export default function PesagemPage() {
     }
   }
 
+  async function handleUsarCapturaComoOficial(captura: (typeof capturasParaFluxo)[number]) {
+    const ordemId = ordemSelecionada?.id ?? operacaoSelecionada?.ordem_id;
+    if (!ordemId || !captura.server_id || !["PRE_OPERACAO", "POS_OPERACAO"].includes(captura.etapa)) {
+      setMensagem("A captura precisa estar sincronizada e pertencer a PRE/POS para ser oficializada.");
+      return;
+    }
+    try {
+      await apiFetch(`/api/v1/balanca/stations/orders/${ordemId}/official-marks`, {
+        method: "POST",
+        body: JSON.stringify({
+          pesagem_id: captura.server_id,
+          etapa: captura.etapa,
+          operador_id: operadorSessao?.operador_id ?? null,
+        }),
+      });
+      setMensagem("Marco oficial atualizado. O resultado será recalculado pelo Core.");
+      void runSyncCycle();
+    } catch (err) {
+      setMensagem(err instanceof Error ? err.message : "Não foi possível atualizar o marco oficial.");
+    }
+  }
+
   async function handleRegistrarPeso(e: React.FormEvent) {
     e.preventDefault();
-    if (!etapaAtual || (!ordemSelecionada && !avulsaConfig)) return;
+    if (!etapaAtual || (!ordemSelecionada && !operacaoSelecionada && !avulsaConfig)) return;
     if (subjectTypeAtivo === "ANIMAL" && !animalSelecionado) {
       setMensagem("Selecione o animal (brinco/SISBOV) antes de confirmar.");
       return;
@@ -219,6 +336,53 @@ export default function PesagemPage() {
         return;
       }
 
+      let operacaoAtiva = operacaoSelecionada;
+      if (avulsaConfig) {
+        if (!processoReferencia.trim() || !placa.trim() || !motoristaNome.trim() || !motoristaDocumentoNumero.trim()) {
+          setMensagem("Informe processo, placa do cavalo e identificação do motorista antes de capturar.");
+          setSalvando(false);
+          return;
+        }
+        const agoraOperacao = new Date().toISOString();
+        const placasNormalizadas = placasCarretas
+          .map((placaCarreta) => placaCarreta.replace(/[^a-zA-Z0-9]/g, "").toUpperCase())
+          .filter(Boolean)
+          .map((placaCarreta) => ({ placa: placaCarreta }));
+        const contexto = {
+          processo: { tipo: processoTipo.trim().toUpperCase(), referencia: processoReferencia.trim().toUpperCase() },
+          veiculo: { placa_cavalo: placa.replace(/[^a-zA-Z0-9]/g, "").toUpperCase(), carretas: placasNormalizadas },
+          motorista: { nome: motoristaNome.trim(), documento: { tipo: motoristaDocumentoTipo, numero: motoristaDocumentoNumero.trim() } },
+        };
+        operacaoAtiva = {
+          operation_local_id: crypto.randomUUID(),
+          ordem_id: null,
+          status_local: "PENDENTE_SYNC",
+          reconciliation_status: "PENDENTE",
+          subject_type: "VEICULO",
+          tipo_pesagem: tipoPesagemNova,
+          natureza_operacao: tipoPesagemNova === "MULTIPLA" ? naturezaOperacaoNova : null,
+          modalidade: tipoPesagemNova === "MULTIPLA" ? "MULTIPLA" : "UNICA",
+          processo: contexto.processo,
+          referencia_externa: contexto.processo.referencia,
+          correlation_id: crypto.randomUUID(),
+          contexto,
+          etapas_realizadas: [],
+          created_at: agoraOperacao,
+          updated_at: agoraOperacao,
+        };
+        await db.operacoes.add(operacaoAtiva);
+        if (tipoPesagemNova === "MULTIPLA") {
+          setOperacaoSelecionadaId(operacaoAtiva.operation_local_id);
+          setAvulsaConfig(null);
+        }
+      }
+
+      if (operacaoAtiva && operacaoAtiva.ordem_id === null && operacaoSelecionada && operacaoAtiva.tipo_pesagem !== "MULTIPLA" && etapaAtual !== "UNICA") {
+        setMensagem("A primeira captura ainda aguarda sincronização e mapeamento para uma Ordem Cloud.");
+        setSalvando(false);
+        return;
+      }
+
       const localId = crypto.randomUUID();
       await db.pesagens.add({
         local_id: localId,
@@ -226,10 +390,15 @@ export default function PesagemPage() {
         authorization_nonce: auth.nonce,
         installation_id: session?.installation_id ?? null,
         device_configuration_id: session?.device_configuration_id ?? null,
-        ordem_id: ordemSelecionada?.id ?? null,
-        subject_type: ordemSelecionada ? null : avulsaConfig!.subject_type,
-        tipo_pesagem: ordemSelecionada ? null : "UNICA",
+        operation_local_id: operacaoAtiva?.operation_local_id ?? null,
+        ordem_id: ordemSelecionada?.id ?? operacaoAtiva?.ordem_id ?? null,
+        subject_type: ordemSelecionada || operacaoAtiva?.ordem_id ? null : avulsaConfig?.subject_type ?? null,
+        tipo_pesagem: ordemSelecionada || operacaoAtiva?.ordem_id ? null : operacaoAtiva?.tipo_pesagem ?? null,
+        natureza_operacao: ordemSelecionada?.natureza_operacao ?? operacaoAtiva?.natureza_operacao ?? null,
+        modalidade: ordemSelecionada?.modalidade ?? operacaoAtiva?.modalidade ?? null,
         etapa: etapaAtual,
+        finalidade: tipoPesagemAtivo === "MULTIPLA" ? finalidadeEfetiva : null,
+        metodo_medicao: tipoPesagemAtivo === "MULTIPLA" ? metodoMedicao : null,
         server_id: null,
         numero_ticket: gerarNumeroTicketLocal(),
         peso_informado_kg: informadoNum.toFixed(3),
@@ -237,9 +406,10 @@ export default function PesagemPage() {
         peso_tara_kg: "0.000",
         captured_via: capturedVia,
         operador_id: operadorSessao?.operador_id ?? null,
+        direcao_veiculo: subjectTypeAtivo === "ANIMAL" ? null : direcaoVeiculo,
         leitura_bruta: leituraBrutaUsada,
-        contexto: {},
-        placa: placa || null,
+        contexto: operacaoAtiva?.contexto ?? {},
+        placa: ((operacaoAtiva?.contexto.veiculo as { placa_cavalo?: string } | undefined)?.placa_cavalo ?? placa) || null,
         motorista: null,
         animal_id: animalSelecionado?.id ?? null,
         pessoa_id: null,
@@ -252,17 +422,39 @@ export default function PesagemPage() {
       await db.offline_auths.delete(auth.id);
       await enqueuePesagem(localId);
 
-      if (ordemSelecionada) {
+      if (tipoPesagemAtivo === "MULTIPLA") {
+        if (operacaoAtiva) await db.operacoes.update(operacaoAtiva.operation_local_id, {
+          status_local: "EM_PESAGEM",
+          etapas_realizadas: [...new Set([...(operacaoAtiva.etapas_realizadas ?? []), etapaAtual])],
+          updated_at: new Date().toISOString(),
+        });
+        if (ordemSelecionada) await db.ordens.update(ordemSelecionada.id, { status: "EM_PESAGEM" });
+        setPesoAferido("");
+        setPesoInformado("");
+        setEtapaMultiplaSelecionada(null);
+        setCapturedVia("MANUAL");
+        setLeituraBrutaUsada(null);
+        setMensagem(`Etapa "${ETAPA_LABEL[etapaAtual]}" registrada. Escolha a próxima ação.`);
+        void runSyncCycle();
+        setSalvando(false);
+        return;
+      }
+
+      if (ordemSelecionada || operacaoAtiva?.ordem_id) {
+        const ordemIdAtiva = ordemSelecionada?.id ?? operacaoAtiva!.ordem_id!;
         const restantes = ETAPAS_POR_TIPO_PESAGEM[tipoPesagemAtivo].filter(
-          (e) => e !== etapaAtual && !(etapasJaFeitas ?? []).includes(e),
+          (e) => e !== etapaAtual && !(ordemSelecionada ? etapasJaFeitas ?? [] : etapasOperacao ?? []).includes(e),
         );
-        await db.ordens.update(ordemSelecionada.id, {
-          status: restantes.length > 0 ? "EM_PESAGEM" : "CONCLUIDA",
+        if (ordemSelecionada) await db.ordens.update(ordemIdAtiva, { status: restantes.length > 0 ? "EM_PESAGEM" : "CONCLUIDA" });
+        if (operacaoAtiva) await db.operacoes.update(operacaoAtiva.operation_local_id, {
+          status_local: restantes.length > 0 ? "EM_PESAGEM" : "CONCLUIDA",
+          etapas_realizadas: [...new Set([...(operacaoAtiva.etapas_realizadas ?? []), etapaAtual])],
+          updated_at: new Date().toISOString(),
         });
         if (restantes.length === 0) {
           // Ordem concluída — o ticket só fica disponível depois que a
           // pesagem sincronizar (o PDF é montado a partir dos dados no servidor).
-          setTicketOrdemId(ordemSelecionada.id);
+          setTicketOrdemId(ordemIdAtiva);
         }
         if (restantes.length > 0) {
           // Mantém a tela na mesma ordem para capturar a próxima etapa.
@@ -286,7 +478,7 @@ export default function PesagemPage() {
   }
 
   return (
-    <main className="min-h-screen p-6 max-w-6xl mx-auto space-y-6">
+    <main className="min-h-[100dvh] p-4 max-w-6xl mx-auto space-y-4 animate-in fade-in duration-500 flex flex-col">
       <PageHeader
         title={session.nome}
         description={`${operadorSessao.nome_exibicao} · Última sincronização: ${session.last_sync_at ? new Date(session.last_sync_at).toLocaleString("pt-BR") : "nunca"}`}
@@ -333,7 +525,7 @@ export default function PesagemPage() {
                 ? leituraBalanca.conectado && !leituraBalanca.stale
                   ? "Balança conectada"
                   : "Balança offline"
-                : "Sem ponte configurada"}
+                : "Balança não configurada"}
             </div>
             <Button
               variant="outline" size="sm"
@@ -343,7 +535,7 @@ export default function PesagemPage() {
                 setConfigPonteAberta(true);
               }}
             >
-              Configurar ponte
+              Conectar Balança
             </Button>
             <Button
               variant="ghost" size="sm" className="text-destructive hover:text-destructive hover:bg-destructive/10"
@@ -361,16 +553,16 @@ export default function PesagemPage() {
       {configPonteAberta && (
         <Card className="shadow-sm">
           <CardHeader className="pb-3">
-            <CardTitle className="text-base">Ponte de hardware (leitura eletrônica)</CardTitle>
+            <CardTitle className="text-base">Conexão Automática da Balança</CardTitle>
             <CardDescription>
-              Endereço do serviço balanca-platform/bridge rodando perto do indicador de peso.
-              Deixe em branco para usar só a digitação manual.
+              Endereço do equipamento na rede local que envia o peso diretamente.
+              Deixe em branco para usar apenas a digitação manual.
             </CardDescription>
           </CardHeader>
           <CardContent>
             <form onSubmit={handleSalvarConfigPonte} className="space-y-4">
               <div className="space-y-1.5">
-                <label className="text-sm font-medium">URL da ponte</label>
+                <label className="text-sm font-medium">Endereço de rede (IP ou URL)</label>
                 <Input
                   placeholder="http://192.168.0.50:8321"
                   value={bridgeUrlForm}
@@ -378,7 +570,7 @@ export default function PesagemPage() {
                 />
               </div>
               <div className="space-y-1.5">
-                <label className="text-sm font-medium">Token (opcional)</label>
+                <label className="text-sm font-medium">Código de segurança (opcional)</label>
                 <Input
                   value={bridgeTokenForm}
                   onChange={(e) => setBridgeTokenForm(e.target.value)}
@@ -421,27 +613,63 @@ export default function PesagemPage() {
 
       {!emCaptura ? (
         <section className="space-y-6">
+          <div className="flex gap-6 border-b border-border/40 pb-0">
+            <button
+              onClick={() => setTabAtual("PENDENTES")}
+              className={`pb-3 text-sm font-bold uppercase tracking-wider transition-colors border-b-2 ${tabAtual === "PENDENTES" ? "border-primary text-foreground" : "border-transparent text-muted-foreground hover:text-foreground"}`}
+            >
+              Pendentes
+            </button>
+            <button
+              onClick={() => setTabAtual("CONCLUIDAS")}
+              className={`pb-3 text-sm font-bold uppercase tracking-wider transition-colors border-b-2 ${tabAtual === "CONCLUIDAS" ? "border-primary text-foreground" : "border-transparent text-muted-foreground hover:text-foreground"}`}
+            >
+              Concluídas
+            </button>
+          </div>
+
+          <div className="relative mt-4 mb-4">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground size-4" />
+            <Input
+              type="text"
+              placeholder="Buscar por placa, referência ou NF..."
+              value={buscaOrdem}
+              onChange={(e) => setBuscaOrdem(e.target.value)}
+              className="pl-10 h-12"
+            />
+          </div>
+
           <div>
-            <h2 className="mb-3 text-sm font-bold text-foreground/80 uppercase tracking-wider">Ordens de pesagem pendentes</h2>
-            {ordens.length === 0 && <p className="text-sm text-muted-foreground">Nenhuma ordem pendente no momento.</p>}
-            <ul className="space-y-3">
-              {ordens.map((ordem: OrdemPendenteLocal) => (
+            {ordensFiltradas.length === 0 && <p className="text-sm text-muted-foreground">Nenhuma ordem encontrada no momento.</p>}
+            <ul className="space-y-4">
+              {ordensFiltradas.map((ordem: OrdemPendenteLocal) => {
+                const isConcluida = ordem.status === "CONCLUIDA";
+                const ItemTag = isConcluida ? "div" : "button";
+
+                return (
                 <li key={ordem.id}>
-                  <button
-                    className="w-full rounded-lg border border-border bg-card p-5 text-left shadow-sm hover:border-primary/50 transition-colors"
+                  <ItemTag
+                    className={`w-full rounded-xl border border-border/50 bg-card/60 backdrop-blur-sm p-5 text-left shadow-sm transition-all duration-300 ${!isConcluida ? "hover:shadow-md hover:-translate-y-1 hover:border-primary/50 group cursor-pointer" : "opacity-80"}`}
                     onClick={() => {
-                      setTicketOrdemId(null);
-                      setOrdemSelecionadaId(ordem.id);
+                      if (!isConcluida || ordem.tipo_pesagem === "MULTIPLA") {
+                        setTicketOrdemId(null);
+                        setEtapaMultiplaSelecionada(null);
+                        setOrdemSelecionadaId(ordem.id);
+                      }
                     }}
                   >
                     <div className="flex justify-between text-base font-semibold text-foreground">
-                      <span>{ordem.origem_tipo}</span>
+                      <span className={!isConcluida ? "group-hover:text-primary transition-colors" : ""}>
+                        {ordem.referencia_externa || ordem.origem_tipo}
+                      </span>
                       <span className="text-muted-foreground text-sm font-normal">{ordem.subject_type}</span>
                     </div>
                     <div className="text-sm text-muted-foreground mt-1 mb-2">
-                      {ordem.tipo_pesagem === "UNICA"
-                        ? "Pesagem única"
-                        : `Pesagem dupla (${ETAPAS_POR_TIPO_PESAGEM[ordem.tipo_pesagem].map((e) => ETAPA_LABEL[e]).join(" → ")})`}{" "}
+                      {ordem.tipo_pesagem === "MULTIPLA"
+                        ? `Múltiplas capturas · ${ordem.natureza_operacao ?? "natureza pendente"}`
+                        : ordem.tipo_pesagem === "UNICA"
+                          ? "Pesagem única"
+                          : `Pesagem dupla (${ETAPAS_POR_TIPO_PESAGEM[ordem.tipo_pesagem].map((e) => ETAPA_LABEL[e]).join(" → ")})`}{" "}
                       · <span className="text-secondary-foreground font-medium">{ordem.status}</span>
                     </div>
                     <div className="flex gap-4">
@@ -455,11 +683,26 @@ export default function PesagemPage() {
                         <div className="text-sm text-muted-foreground">NF: <strong className="text-foreground">{ordem.numero_documento_fiscal}</strong></div>
                       )}
                     </div>
-                  </button>
+                  </ItemTag>
                 </li>
-              ))}
+              )})}
             </ul>
           </div>
+
+          {operacoesFiltradas.length > 0 && (
+            <div className="space-y-3 border-t border-border pt-5">
+              <h2 className="text-sm font-bold uppercase tracking-wider text-muted-foreground">Operações criadas nesta Station</h2>
+              {operacoesFiltradas.map((operacao) => {
+                const veiculo = operacao.contexto.veiculo as { placa_cavalo?: string } | undefined;
+                return <button key={operacao.operation_local_id} className="w-full rounded-xl border border-primary/20 bg-primary/5 p-4 text-left hover:border-primary/50" onClick={() => {
+                  setOrdemSelecionadaId(null); setEtapaMultiplaSelecionada(null); setOperacaoSelecionadaId(operacao.operation_local_id); setPlaca(veiculo?.placa_cavalo ?? "");
+                }}>
+                  <div className="flex justify-between gap-3"><strong>{operacao.processo.referencia}</strong><span className="text-xs text-muted-foreground">{operacao.status_local}</span></div>
+                  <p className="mt-1 text-sm text-muted-foreground">{operacao.processo.tipo} · cavalo {veiculo?.placa_cavalo ?? "—"} · {operacao.tipo_pesagem}{operacao.natureza_operacao ? ` · ${operacao.natureza_operacao}` : ""}</p>
+                </button>;
+              })}
+            </div>
+          )}
 
           <div className="border-t border-border pt-6 mt-6">
             <p className="mb-3 text-sm text-muted-foreground">
@@ -483,36 +726,43 @@ export default function PesagemPage() {
                 <Button variant="ghost" size="sm" className="-ml-2 w-fit h-8 text-muted-foreground mb-2" onClick={voltarParaLista}>
                   ← Voltar
                 </Button>
-                <CardTitle className="text-lg">Pesagem avulsa</CardTitle>
+                <CardTitle className="text-lg">Nova operação de pesagem</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="space-y-1.5">
-                  <label className="text-sm font-semibold">O que está sendo pesado?</label>
-                  <select
-                    className="flex h-11 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                    value={avulsaConfig.subject_type}
-                    onChange={(e) => setAvulsaConfig({ subject_type: e.target.value as SubjectType })}
-                  >
-                    <option value="VEICULO">Veículo / carga</option>
-                    <option value="ANIMAL">Animal</option>
-                  </select>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div className="space-y-1.5">
+                    <label className="text-sm font-semibold">Processo — tipo</label>
+                    <select
+                      className="flex h-11 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                      value={processoTipo}
+                      onChange={(e) => setProcessoTipo(e.target.value)}
+                    >
+                      <option value="PEDIDO">Pedido</option><option value="ROMANEIO">Romaneio</option><option value="ORDEM_CARGA">Ordem de carga</option>
+                      <option value="RECEBIMENTO">Recebimento</option><option value="EXPEDICAO">Expedição</option><option value="TRANSFERENCIA">Transferência</option><option value="OUTRO">Outro</option>
+                    </select>
+                  </div>
+                  <div className="space-y-1.5"><label className="text-sm font-semibold">Referência <span className="text-destructive">*</span></label><Input className="h-11" value={processoReferencia} onChange={(e) => setProcessoReferencia(e.target.value)} placeholder="ROM-84721" /></div>
+                  <div className="space-y-1.5"><label className="text-sm font-semibold">Modalidade</label><select className="flex h-11 w-full rounded-md border border-input bg-background px-3 text-sm" value={tipoPesagemNova} onChange={(e) => setTipoPesagemNova(e.target.value as TipoPesagem)}><option value="UNICA">Única</option><option value="DUPLA">Dupla</option><option value="DUPLA_ENTRADA_DESCARGA">Dupla entrada/descarga</option><option value="DUPLA_SAIDA_CARREGAMENTO">Dupla saída/carregamento</option><option value="MULTIPLA">Múltiplas capturas</option></select></div>
                 </div>
-                <p className="text-xs text-muted-foreground">
-                  Pesagem avulsa só suporta pesagem única — sem ordem prévia não é possível encadear
-                  etapas (chegada/saída) offline.
-                </p>
+                {tipoPesagemNova === "MULTIPLA" && (
+                  <div className="space-y-1.5"><label className="text-sm font-semibold">Natureza da operação</label><select className="flex h-11 w-full rounded-md border border-input bg-background px-3 text-sm" value={naturezaOperacaoNova} onChange={(e) => setNaturezaOperacaoNova(e.target.value as NaturezaOperacao)}><option value="RECEBIMENTO">Recebimento</option><option value="EXPEDICAO">Expedição</option><option value="TRANSFERENCIA">Transferência</option><option value="DEVOLUCAO">Devolução</option><option value="OUTRA">Outra</option></select></div>
+                )}
+                <div className="space-y-1.5"><label className="text-sm font-semibold">Placa do cavalo <span className="text-destructive">*</span></label><Input value={placa} onChange={(e) => setPlaca(e.target.value.toUpperCase())} placeholder="ABC1D23" /></div>
+                <div className="space-y-2"><label className="text-sm font-semibold">Carretas</label>{placasCarretas.map((placaCarreta, index) => <div className="flex gap-2" key={index}><Input value={placaCarreta} onChange={(e) => setPlacasCarretas(placasCarretas.map((value, position) => position === index ? e.target.value.toUpperCase() : value))} placeholder="DEF4G56" /><Button type="button" variant="outline" onClick={() => setPlacasCarretas(placasCarretas.filter((_, position) => position !== index))}>Remover</Button></div>)}<Button type="button" variant="outline" onClick={() => setPlacasCarretas([...placasCarretas, ""])}>+ Adicionar carreta</Button></div>
+                <div className="grid gap-3 sm:grid-cols-4"><div className="space-y-1.5 sm:col-span-2"><label className="text-sm font-semibold">Motorista <span className="text-destructive">*</span></label><Input className="h-11" value={motoristaNome} onChange={(e) => setMotoristaNome(e.target.value)} /></div><div className="space-y-1.5"><label className="text-sm font-semibold">Documento</label><select className="flex h-11 w-full rounded-md border border-input bg-background px-3 text-sm" value={motoristaDocumentoTipo} onChange={(e) => setMotoristaDocumentoTipo(e.target.value)}><option>CNH</option><option>CPF</option><option>RG</option><option>OUTRO</option></select></div><div className="space-y-1.5"><label className="text-sm font-semibold">Número <span className="text-destructive">*</span></label><Input className="h-11" value={motoristaDocumentoNumero} onChange={(e) => setMotoristaDocumentoNumero(e.target.value)} /></div></div>
+                <p className="text-xs text-muted-foreground">Produto, NF e observações são complementares e não bloqueiam esta captura.</p>
               </CardContent>
             </Card>
           )}
 
-          <form onSubmit={handleRegistrarPeso} className="space-y-6 rounded-xl border border-border bg-card p-6 shadow-sm relative">
+          <form onSubmit={handleRegistrarPeso} className="space-y-3 rounded-xl border border-border bg-card p-4 shadow-sm relative flex-1 flex flex-col justify-center">
             {!avulsaConfig && (
-              <Button type="button" variant="ghost" size="sm" className="absolute top-4 right-4 text-muted-foreground" onClick={voltarParaLista}>
+              <Button type="button" variant="ghost" size="sm" className="absolute top-3 right-3 text-muted-foreground" onClick={voltarParaLista}>
                 ✕ Cancelar
               </Button>
             )}
             <div>
-              <h2 className="text-2xl font-bold text-foreground">
+              <h2 className="text-xl font-bold text-foreground">
                 {etapaAtual ? ETAPA_LABEL[etapaAtual] : "Pesagem"} — <span className="text-primary">{origemLabel}</span>
               </h2>
               {ordemSelecionada && (
@@ -530,12 +780,111 @@ export default function PesagemPage() {
               )}
             </div>
 
-            {session.bridge_url && (
-              <div className="rounded-lg border-2 border-dashed border-border p-4 bg-muted/20">
-                <div className="flex items-center justify-between">
+            {tipoPesagemAtivo === "MULTIPLA" && (
+              <div className="space-y-3 rounded-lg border border-primary/20 bg-primary/5 p-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
                   <div>
-                    <p className="text-sm font-medium text-muted-foreground mb-1">Leitura ao vivo da balança</p>
-                    <p className="text-4xl font-bold tabular-nums text-foreground tracking-tight">
+                    <p className="text-sm font-semibold">{naturezaAtiva ?? "Natureza pendente"}</p>
+                    <p className="text-xs text-muted-foreground">Ações disponíveis para esta operação</p>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {acoesAtuais.map((etapa) => (
+                      <Button
+                        key={etapa}
+                        type="button"
+                        size="sm"
+                        variant={etapaAtual === etapa ? "default" : "outline"}
+                        onClick={() => setEtapaMultiplaSelecionada(etapa)}
+                      >
+                        {ETAPA_LABEL[etapa]}{capturasParaFluxo.some((captura) => captura.etapa === etapa) ? " · repetir" : ""}
+                      </Button>
+                    ))}
+                  </div>
+                </div>
+                {capturasParaFluxo.length > 0 && (
+                  <div className="space-y-2 border-t border-primary/15 pt-2">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Capturas desta operação</p>
+                    {capturasParaFluxo.map((captura, index) => {
+                      const oficial = capturasParaFluxo.find((item) => item.etapa === captura.etapa && item.finalidade === "OPERACIONAL");
+                      const peso = Number(captura.peso_aferido_kg ?? 0);
+                      const pesoOficial = Number(oficial?.peso_aferido_kg ?? 0);
+                      const diferenca = oficial && oficial.local_id !== captura.local_id ? Math.abs(peso - pesoOficial) : null;
+                      const percentual = diferenca !== null && pesoOficial !== 0 ? (diferenca / Math.abs(pesoOficial)) * 100 : null;
+                      return (
+                        <div key={captura.local_id} className="flex flex-wrap items-center justify-between gap-2 rounded-md bg-background/70 p-2 text-sm">
+                          <span><strong>#{index + 1} {ETAPA_LABEL[captura.etapa]}</strong> · {peso.toLocaleString("pt-BR", { minimumFractionDigits: 3 })} kg · {captura.finalidade ?? "OPERACIONAL"}</span>
+                          <span className="flex items-center gap-2">
+                            {diferenca !== null && <span className="text-xs text-muted-foreground">diferença {diferenca.toLocaleString("pt-BR", { minimumFractionDigits: 3 })} kg{percentual !== null ? ` (${percentual.toFixed(2)}%)` : ""}</span>}
+                            {captura.finalidade === "CONFERENCIA" && (
+                              <Button type="button" size="sm" variant="outline" onClick={() => handleUsarCapturaComoOficial(captura)}>
+                                Usar como oficial
+                              </Button>
+                            )}
+                            <span className="text-xs text-muted-foreground">{captura.synced ? "sincronizada" : "pendente"}</span>
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+                {(ordemSelecionada?.resultado_status ?? operacaoSelecionada?.resultado_status) && (
+                  <div className="rounded-md border border-secondary/30 bg-secondary/10 p-3 text-sm">
+                    <p className="font-semibold">Resultado: {ordemSelecionada?.resultado_status ?? operacaoSelecionada?.resultado_status}</p>
+                    {(ordemSelecionada?.resultado_motivo ?? operacaoSelecionada?.resultado_motivo) && <p className="text-muted-foreground">{ordemSelecionada?.resultado_motivo ?? operacaoSelecionada?.resultado_motivo}</p>}
+                    {(ordemSelecionada?.peso_liquido_kg ?? operacaoSelecionada?.peso_liquido_kg) && <p className="mt-1">Bruto {ordemSelecionada?.peso_bruto_kg ?? operacaoSelecionada?.peso_bruto_kg} kg · Tara {ordemSelecionada?.peso_tara_kg ?? operacaoSelecionada?.peso_tara_kg} kg · Líquido {ordemSelecionada?.peso_liquido_kg ?? operacaoSelecionada?.peso_liquido_kg} kg</p>}
+                    {(ordemSelecionada?.delta_pre_operacao_kg ?? operacaoSelecionada?.delta_pre_operacao_kg) && <p className="text-xs text-muted-foreground">Delta pré-operação: {ordemSelecionada?.delta_pre_operacao_kg ?? operacaoSelecionada?.delta_pre_operacao_kg} kg</p>}
+                    {(ordemSelecionada?.delta_pos_operacao_kg ?? operacaoSelecionada?.delta_pos_operacao_kg) && <p className="text-xs text-muted-foreground">Delta pós-operação: {ordemSelecionada?.delta_pos_operacao_kg ?? operacaoSelecionada?.delta_pos_operacao_kg} kg</p>}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {subjectTypeAtivo !== "ANIMAL" && (
+              <div className="space-y-1.5">
+                <label htmlFor="direcao-veiculo" className="text-sm font-semibold">Direção do veículo</label>
+                <select
+                  id="direcao-veiculo"
+                  className="flex h-11 w-full rounded-md border border-input bg-background px-3 text-sm"
+                  value={direcaoVeiculo}
+                  onChange={(e) => setDirecaoVeiculo(e.target.value as "ENTRADA" | "SAIDA")}
+                >
+                  <option value="ENTRADA">Entrada</option>
+                  <option value="INTERNA">Interna</option>
+                  <option value="SAIDA">Saída</option>
+                </select>
+              </div>
+            )}
+
+            {tipoPesagemAtivo === "MULTIPLA" && (
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div className="space-y-1.5">
+                  <label className="text-sm font-semibold">Finalidade</label>
+                  <select className="flex h-11 w-full rounded-md border border-input bg-background px-3 text-sm" value={finalidadeEfetiva} onChange={(e) => setFinalidadeCaptura(e.target.value as FinalidadeCaptura)}>
+                    <option value="OPERACIONAL">Operacional</option>
+                    <option value="CONFERENCIA">Conferência</option>
+                    <option value="AMOSTRAGEM">Amostragem</option>
+                  </select>
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-sm font-semibold">Método de medição</label>
+                  <select className="flex h-11 w-full rounded-md border border-input bg-background px-3 text-sm" value={metodoMedicao} onChange={(e) => setMetodoMedicao(e.target.value as MetodoMedicao)}>
+                    <option value="ESTATICA">Estática</option>
+                    <option value="DINAMICA">Dinâmica</option>
+                    <option value="POR_EIXO">Por eixo</option>
+                  </select>
+                </div>
+              </div>
+            )}
+
+            {session.bridge_url && (
+              <div className={`rounded-xl border-2 p-3 transition-all duration-500 relative overflow-hidden ${leituraBalanca.conectado ? "border-primary/50 bg-[#061118] shadow-[0_0_30px_rgba(var(--color-primary),0.1)]" : "border-dashed border-border bg-muted/20"}`}>
+                <div className="flex items-center justify-between relative z-10">
+                  <div>
+                    <p className={`text-xs font-semibold mb-0.5 flex items-center gap-2 ${leituraBalanca.conectado ? "text-primary/80" : "text-muted-foreground"}`}>
+                      {leituraBalanca.conectado && <span className="size-2.5 rounded-full bg-primary animate-pulse shadow-[0_0_10px_rgba(var(--color-primary),0.8)]"></span>}
+                      LEITURA DA BALANÇA
+                    </p>
+                    <p className={`text-4xl font-mono font-bold tracking-tight ${leituraBalanca.conectado ? (leituraBalanca.stable ? "text-secondary text-glow-secondary" : "text-primary text-glow") : "text-foreground"}`}>
                       {leituraBalanca.peso_kg
                         ? `${Number(leituraBalanca.peso_kg).toLocaleString("pt-BR", { minimumFractionDigits: 3 })} kg`
                         : "—"}
@@ -547,9 +896,9 @@ export default function PesagemPage() {
                     size="lg"
                     disabled={!leituraBalanca.peso_kg || leituraBalanca.stale || !leituraBalanca.stable || !leituraBalanca.conectado}
                     onClick={handleUsarPesoDaBalanca}
-                    className="font-bold text-base h-14 px-6 bg-secondary hover:bg-secondary/90 text-secondary-foreground"
+                    className="font-bold text-sm h-10 px-5 bg-secondary hover:bg-secondary/90 text-secondary-foreground"
                   >
-                    Usar este peso
+                    Usar peso
                   </Button>
                 </div>
                 {!leituraBalanca.conectado && (
@@ -564,45 +913,47 @@ export default function PesagemPage() {
               </div>
             )}
 
-            <div className="space-y-2">
-              <label className="text-sm font-semibold">Peso aferido (kg)</label>
-              <Input
-                type="text"
-                inputMode="decimal"
-                className="w-full h-16 text-3xl font-bold text-center tracking-wider bg-background border-2"
-                value={pesoAferido}
-                onChange={(e) => handlePesoAferidoDigitado(e.target.value)}
-                placeholder="0,000"
-                required
-                autoFocus
-              />
-              <p className="text-xs text-muted-foreground text-center mt-2">
-                {capturedVia === "ELETRONICA"
-                  ? "Preenchido pela leitura da balança — edite para digitar manualmente."
-                  : "O que a balança efetivamente mediu."}
-              </p>
-            </div>
-
-            <div className="space-y-2 pt-4 border-t border-border">
-              <label className="text-sm font-semibold">Peso informado (kg)</label>
-              <Input
-                type="text"
-                inputMode="decimal"
-                className="w-full h-12 text-xl"
-                value={pesoInformado}
-                onChange={(e) => setPesoInformado(e.target.value)}
-                placeholder="0,000"
-              />
-              <p className="text-xs text-muted-foreground">
-                Valor declarado (nota fiscal/motorista) — só preencha se divergir do peso aferido.
-              </p>
-            </div>
-
-            {subjectTypeAtivo === "VEICULO" && etapaAtual !== "SAIDA" && etapaAtual !== "POS_DESCARGA" && (
-              <div className="space-y-2">
-                <label className="text-sm font-semibold">Placa</label>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-3 border-t border-border">
+              <div className="space-y-1">
+                <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Peso aferido (kg)</label>
                 <Input
-                  className="w-full h-12 uppercase text-lg"
+                  type="text"
+                  inputMode="decimal"
+                  className="w-full h-14 text-3xl font-mono font-black text-center tracking-wider bg-background border-2 shadow-inner"
+                  value={pesoAferido}
+                  onChange={(e) => handlePesoAferidoDigitado(e.target.value)}
+                  placeholder="0,000"
+                  required
+                  autoFocus
+                />
+                <p className="text-[10px] text-muted-foreground text-center">
+                  {capturedVia === "ELETRONICA"
+                    ? "Preenchido pela balança."
+                    : "O que a balança efetivamente mediu."}
+                </p>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Peso informado (kg)</label>
+                <Input
+                  type="text"
+                  inputMode="decimal"
+                  className="w-full h-14 text-3xl font-mono font-black text-center tracking-wider bg-background border-2 shadow-inner"
+                  value={pesoInformado}
+                  onChange={(e) => setPesoInformado(e.target.value)}
+                  placeholder="0,000"
+                />
+                <p className="text-[10px] text-muted-foreground text-center">
+                  Nota fiscal/motorista (só se divergir).
+                </p>
+              </div>
+            </div>
+
+            {subjectTypeAtivo === "VEICULO" && !avulsaConfig && !operacaoSelecionada && etapaAtual !== "SAIDA" && etapaAtual !== "POS_DESCARGA" && (
+              <div className="space-y-1">
+                <label className="text-xs font-semibold">Placa do veículo</label>
+                <Input
+                  className="w-full h-10 uppercase text-base"
                   value={placa}
                   onChange={(e) => setPlaca(e.target.value)}
                 />
@@ -673,14 +1024,16 @@ export default function PesagemPage() {
               </div>
             )}
 
-            <Button
-              type="submit"
-              size="lg"
-              disabled={salvando}
-              className="w-full h-16 text-xl font-bold shadow-md hover:shadow-lg transition-all"
-            >
-              {salvando ? "Salvando..." : "Confirmar pesagem"}
-            </Button>
+            <div className="pt-2 mt-auto">
+              <Button
+                type="submit"
+                size="lg"
+                disabled={salvando}
+                className="w-full h-12 text-lg font-bold shadow-xl hover:shadow-primary/40 hover:-translate-y-1 transition-all active:scale-[0.98] bg-gradient-to-r from-primary to-primary/90"
+              >
+                {salvando ? "Salvando..." : "CONFIRMAR PESAGEM"}
+              </Button>
+            </div>
           </form>
         </>
       )}

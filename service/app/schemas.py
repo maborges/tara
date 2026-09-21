@@ -324,10 +324,13 @@ class ApiClientConfigurationOut(BaseModel):
 
 
 class ContingencyRecordIn(BaseModel):
+    operation_local_id: str | None = Field(default=None, max_length=120)
     local_id: str = Field(min_length=1, max_length=120)
     ordem_id: uuid.UUID | None = None
     subject_type: Literal["VEICULO", "ANIMAL"] | None = None
     tipo_pesagem: str | None = Field(default=None, max_length=30)
+    natureza_operacao: Literal["RECEBIMENTO", "EXPEDICAO", "TRANSFERENCIA", "DEVOLUCAO", "OUTRA"] | None = None
+    modalidade: Literal["UNICA", "MULTIPLA"] | None = None
     etapa: str = Field(min_length=1, max_length=30)
     numero_ticket: str | None = Field(default=None, max_length=120)
     peso_informado_kg: str | None = None
@@ -336,6 +339,9 @@ class ContingencyRecordIn(BaseModel):
     captured_via: Literal["MANUAL", "ELETRONICA"] = "MANUAL"
     leitura_bruta: dict[str, Any] | None = None
     data_pesagem: datetime | None = None
+    direcao_veiculo: Literal["ENTRADA", "INTERNA", "SAIDA"] | None = None
+    finalidade: Literal["OPERACIONAL", "CONFERENCIA", "AMOSTRAGEM"] | None = None
+    metodo_medicao: Literal["ESTATICA", "DINAMICA", "POR_EIXO"] | None = None
     contexto: dict[str, Any] = Field(default_factory=dict)
     installation_id: uuid.UUID | None = None
     device_configuration_id: uuid.UUID | None = None
@@ -379,7 +385,10 @@ class OrderIn(BaseModel):
         "DUPLA",
         "DUPLA_ENTRADA_DESCARGA",
         "DUPLA_SAIDA_CARREGAMENTO",
-    ]
+        "MULTIPLA",
+    ] | None = None
+    natureza_operacao: Literal["RECEBIMENTO", "EXPEDICAO", "TRANSFERENCIA", "DEVOLUCAO", "OUTRA"] | None = None
+    modalidade: Literal["UNICA", "MULTIPLA"] | None = None
     contexto: dict[str, Any] = Field(default_factory=dict)
 
 
@@ -392,6 +401,8 @@ class OrderOut(BaseModel):
     correlation_id: str
     subject_type: str
     tipo_pesagem: str
+    natureza_operacao: str | None = None
+    modalidade: str | None = None
     contexto: dict[str, Any]
     status: str
     # Resultado físico da operação (migration 033).
@@ -399,6 +410,12 @@ class OrderOut(BaseModel):
     peso_tara_kg: Decimal | None
     tara_source: str | None
     peso_liquido_kg: Decimal | None
+    resultado_status: str | None = None
+    resultado_motivo: str | None = None
+    resultado_versao: int = 0
+    resultado_calculado_em: datetime | None = None
+    delta_pre_operacao_kg: Decimal | None = None
+    delta_pos_operacao_kg: Decimal | None = None
     created_at: datetime
     concluida_em: datetime | None
 
@@ -531,9 +548,11 @@ class WeighingIn(BaseModel):
     operador_id: uuid.UUID | None = None
     leitura_bruta: dict[str, Any] | None = None
     captured_at: datetime | None = None
-    direcao_veiculo: Literal["ENTRADA", "SAIDA"] | None = None
+    direcao_veiculo: Literal["ENTRADA", "INTERNA", "SAIDA"] | None = None
     natureza_mercadoria: Literal["ENTRADA", "SAIDA", "NEUTRA"] | None = None
     tipo_operacao: str | None = Field(default=None, max_length=60)
+    finalidade: Literal["OPERACIONAL", "CONFERENCIA", "AMOSTRAGEM"] | None = None
+    metodo_medicao: Literal["ESTATICA", "DINAMICA", "POR_EIXO"] | None = None
     contexto: dict[str, Any] = Field(default_factory=dict)
 
     @field_validator("captured_at")
@@ -558,13 +577,95 @@ class WeighingOut(BaseModel):
     direcao_veiculo: str | None
     natureza_mercadoria: str | None
     tipo_operacao: str | None
+    finalidade: str | None
+    metodo_medicao: str | None
     contexto: dict[str, Any]
+
+
+class OfficialMarkIn(BaseModel):
+    pesagem_id: uuid.UUID
+    etapa: str = Field(min_length=1, max_length=30)
+    operador_id: uuid.UUID | None = None
+
+
+class OfficialMarkOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: uuid.UUID
+    tenant_id: uuid.UUID
+    ordem_id: uuid.UUID
+    pesagem_id: uuid.UUID
+    etapa: str
+    decidido_em: datetime
+    operador_id: uuid.UUID | None
+
+
+class OrderResultHistoryOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: uuid.UUID
+    tenant_id: uuid.UUID
+    ordem_id: uuid.UUID
+    versao: int
+    status: str
+    motivo: str | None
+    marco_pre_id: uuid.UUID | None
+    marco_pos_id: uuid.UUID | None
+    peso_bruto_kg: Decimal | None
+    peso_tara_kg: Decimal | None
+    peso_liquido_kg: Decimal | None
+    tara_source: str | None
+    delta_pre_operacao_kg: Decimal | None
+    delta_pos_operacao_kg: Decimal | None
+    calculado_em: datetime
 
 
 class WeighingReconciliationIn(BaseModel):
     ordem_id: uuid.UUID | None = None
     status: Literal["VINCULADA", "CRIAR_ORDEM", "PENDENTE_RECONCILIACAO", "REJEITADA"]
     ordem: OrderIn | None = None
+
+
+class ProcessoOperacionalIn(BaseModel):
+    # String controlada pela Station/cliente, deliberadamente extensível: a
+    # Plataforma não modela Pedido, Romaneio ou demais domínios do ERP.
+    tipo: str = Field(min_length=1, max_length=60)
+    referencia: str = Field(min_length=1, max_length=180)
+
+    @field_validator("tipo", "referencia")
+    @classmethod
+    def normalize_operational_text(cls, value: str) -> str:
+        normalized = value.strip().upper()
+        if not normalized:
+            raise ValueError("valor operacional não pode ser vazio")
+        return normalized
+
+
+class VeiculoOperacionalIn(BaseModel):
+    placa_cavalo: str = Field(min_length=1, max_length=16)
+    carretas: list[dict[str, str]] = Field(default_factory=list, max_length=8)
+
+    @field_validator("placa_cavalo")
+    @classmethod
+    def normalize_plate(cls, value: str) -> str:
+        return "".join(char for char in value.upper() if char.isalnum())
+
+
+class MotoristaOperacionalIn(BaseModel):
+    nome: str = Field(min_length=1, max_length=160)
+    documento: dict[str, str]
+
+
+class OfflineOperationIn(BaseModel):
+    operation_local_id: str = Field(min_length=1, max_length=120)
+    subject_type: Literal["VEICULO"] = "VEICULO"
+    tipo_pesagem: Literal["UNICA", "DUPLA", "DUPLA_ENTRADA_DESCARGA", "DUPLA_SAIDA_CARREGAMENTO", "MULTIPLA"]
+    natureza_operacao: Literal["RECEBIMENTO", "EXPEDICAO", "TRANSFERENCIA", "DEVOLUCAO", "OUTRA"] | None = None
+    modalidade: Literal["UNICA", "MULTIPLA"] | None = None
+    processo: ProcessoOperacionalIn
+    referencia_externa: str = Field(min_length=1, max_length=180)
+    correlation_id: str = Field(min_length=1, max_length=120)
+    veiculo: VeiculoOperacionalIn
+    motorista: MotoristaOperacionalIn
+    contexto: dict[str, Any] = Field(default_factory=dict)
 
 
 class WeighingPageOut(BaseModel):
@@ -627,9 +728,11 @@ class SyncPushIn(BaseModel):
 
 class SyncResultOut(BaseModel):
     local_id: str
-    status: Literal["CREATED", "ERROR"]
+    status: Literal["CREATED", "ERROR", "CONFLICT"]
     server_id: uuid.UUID | None = None
     error_message: str | None = None
+    operation_local_id: str | None = None
+    ordem_id: uuid.UUID | None = None
 
 
 class SyncPushOut(BaseModel):

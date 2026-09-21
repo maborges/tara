@@ -442,3 +442,73 @@ Este diretório possui seu próprio `.git` para permitir versionamento e release
 independentes. Em produção, ele pode ser publicado como um repositório remoto
 próprio, por exemplo `tara`.
 # balanca
+
+## Resumo dos Comandos
+
+Sequência resumida para subir o ambiente local com API, Station e Bridge
+simulada.
+
+### Terminal 1 — simulador da balança
+
+```bash
+cd /opt/lampp/htdocs/tara/bridge
+./.venv/bin/python simulator.py --port 4001 --peso-base 42380
+```
+
+### Terminal 2 — Bridge lendo o simulador
+
+```bash
+cd /opt/lampp/htdocs/tara/bridge
+TARA_BRIDGE_CONFIG=config.simulator.yaml ./.venv/bin/python -m balanca_bridge.main
+```
+
+Teste rápido:
+
+```bash
+curl http://127.0.0.1:8322/peso-atual
+```
+
+### Terminal 3 — API
+
+```bash
+cd /opt/lampp/htdocs/tara/service
+./start_server.sh
+```
+
+API padrão:
+
+```text
+http://localhost:8010
+```
+
+### Terminal 4 — Station
+
+```bash
+cd /opt/lampp/htdocs/tara
+pnpm station:dev
+```
+
+Station padrão:
+
+```text
+http://localhost:3003
+```
+
+Na Station, configure a URL da Bridge como:
+
+```text
+http://localhost:8322
+```
+
+### Opcional — Backoffice
+
+```bash
+cd /opt/lampp/htdocs/tara
+pnpm backoffice:dev
+```
+
+Backoffice padrão:
+
+```text
+http://localhost:3004
+```

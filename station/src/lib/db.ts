@@ -1,15 +1,22 @@
 import Dexie, { type EntityTable } from "dexie";
 
-export type TipoPesagem = "UNICA" | "DUPLA" | "DUPLA_ENTRADA_DESCARGA" | "DUPLA_SAIDA_CARREGAMENTO";
-export type Etapa = "UNICA" | "CHEGADA" | "POS_DESCARGA" | "PRE_CARREGAMENTO" | "SAIDA";
+export type TipoPesagem = "UNICA" | "DUPLA" | "DUPLA_ENTRADA_DESCARGA" | "DUPLA_SAIDA_CARREGAMENTO" | "MULTIPLA";
+export type Modalidade = "UNICA" | "MULTIPLA";
+export type NaturezaOperacao = "RECEBIMENTO" | "EXPEDICAO" | "TRANSFERENCIA" | "DEVOLUCAO" | "OUTRA";
+export type DirecaoVeiculo = "ENTRADA" | "INTERNA" | "SAIDA";
+export type FinalidadeCaptura = "OPERACIONAL" | "CONFERENCIA" | "AMOSTRAGEM";
+export type MetodoMedicao = "ESTATICA" | "DINAMICA" | "POR_EIXO";
+export type Etapa = "UNICA" | "CHEGADA" | "POS_DESCARGA" | "PRE_CARREGAMENTO" | "SAIDA" | "PRE_OPERACAO" | "INTERMEDIARIA" | "POS_OPERACAO";
 
 // Etapas esperadas por tipo_pesagem, na ordem em que ocorrem — espelha
 // balanca.schemas.ETAPAS_POR_TIPO_PESAGEM no backend.
-export const ETAPAS_POR_TIPO_PESAGEM: Record<TipoPesagem, Etapa[]> = {
+export const ETAPAS_POR_TIPO_PESAGEM: Record<Exclude<TipoPesagem, "MULTIPLA">, Etapa[]> = {
   UNICA: ["UNICA"],
   DUPLA: ["CHEGADA", "SAIDA"],
   DUPLA_ENTRADA_DESCARGA: ["CHEGADA", "POS_DESCARGA"],
-  DUPLA_SAIDA_CARREGAMENTO: ["PRE_CARREGAMENTO", "SAIDA"],
+  // Regra canônica da Cloud: a tara é apurada na chegada e o bruto na saída.
+  // Não usar PRE_CARREGAMENTO, que não é uma etapa válida no Core.
+  DUPLA_SAIDA_CARREGAMENTO: ["CHEGADA", "SAIDA"],
 };
 
 export const ETAPA_LABEL: Record<Etapa, string> = {
@@ -18,14 +25,20 @@ export const ETAPA_LABEL: Record<Etapa, string> = {
   POS_DESCARGA: "Pós-descarga",
   PRE_CARREGAMENTO: "Pré-carregamento",
   SAIDA: "Saída",
+  PRE_OPERACAO: "Pré-operação",
+  INTERMEDIARIA: "Intermediária",
+  POS_OPERACAO: "Pós-operação",
 };
 
 export interface OrdemPendenteLocal {
   id: string; // UUID do servidor
   origem_tipo: string;
   origem_id: string | null;
+  referencia_externa: string;
   subject_type: "VEICULO" | "ANIMAL";
   tipo_pesagem: TipoPesagem;
+  natureza_operacao?: NaturezaOperacao | null;
+  modalidade?: Modalidade | null;
   status: "PENDENTE" | "EM_PESAGEM" | "CONCLUIDA" | "CANCELADA";
   contexto: Record<string, unknown>;
   produto_id: string | null;
@@ -37,6 +50,14 @@ export interface OrdemPendenteLocal {
   // Etapas já registradas no servidor (vindas do último pull) — usado para
   // não repetir uma etapa já feita quando a ordem for reaberta na lista.
   etapas_realizadas: Etapa[];
+  peso_bruto_kg?: string | null;
+  peso_tara_kg?: string | null;
+  peso_liquido_kg?: string | null;
+  tara_source?: string | null;
+  resultado_status?: string | null;
+  resultado_motivo?: string | null;
+  delta_pre_operacao_kg?: string | null;
+  delta_pos_operacao_kg?: string | null;
   created_at: string;
 }
 
@@ -44,11 +65,14 @@ export interface PesagemLocal {
   operador_id?: string | null;
   device_configuration_id?: string | null;
   installation_id?: string | null;
-  direcao_veiculo?: "ENTRADA" | "SAIDA" | null;
+  direcao_veiculo?: DirecaoVeiculo | null;
   natureza_mercadoria?: "ENTRADA" | "SAIDA" | "NEUTRA" | null;
   tipo_operacao?: string | null;
   contexto?: Record<string, unknown>;
   local_id: string; // UUID gerado no dispositivo — chave de idempotência do sync
+  // Identidade da operação local. É diferente de local_id: uma operação dupla
+  // possui duas PesagemLocal, cada qual com seu próprio local_id.
+  operation_local_id?: string | null;
   // null = pesagem avulsa (sem ordem prévia do módulo cliente): a estação cria
   // uma ordem "sombra" no servidor durante o sync push, ver lib/sync/push.ts.
   ordem_id: string | null;
@@ -56,7 +80,11 @@ export interface PesagemLocal {
   // para montar a ordem sombra (ver PesagemService/SyncService no backend).
   subject_type: "VEICULO" | "ANIMAL" | null;
   tipo_pesagem: TipoPesagem | null;
+  natureza_operacao?: NaturezaOperacao | null;
+  modalidade?: Modalidade | null;
   etapa: Etapa;
+  finalidade?: FinalidadeCaptura | null;
+  metodo_medicao?: MetodoMedicao | null;
   server_id: string | null;
   numero_ticket: string | null;
   // Peso informado (declarado — ex.: NF/motorista) vs aferido (medido pela
@@ -77,6 +105,41 @@ export interface PesagemLocal {
   synced: 0 | 1; // Dexie não indexa booleans — usar 0/1
   authorization_id?: string | null;
   authorization_nonce?: string | null;
+}
+
+export type OperacaoLocalStatus =
+  | "PENDENTE_SYNC"
+  | "SINCRONIZANDO"
+  | "MAPEADA"
+  | "EM_PESAGEM"
+  | "CONCLUIDA"
+  | "PENDENTE_RECONCILIACAO"
+  | "ERRO_SYNC";
+
+export interface OperacaoLocal {
+  operation_local_id: string;
+  ordem_id: string | null;
+  status_local: OperacaoLocalStatus;
+  reconciliation_status: "PENDENTE" | "MAPEADA" | "PENDENTE_RECONCILIACAO";
+  subject_type: "VEICULO";
+  tipo_pesagem: TipoPesagem;
+  natureza_operacao?: NaturezaOperacao | null;
+  modalidade?: Modalidade | null;
+  processo: { tipo: string; referencia: string };
+  referencia_externa: string;
+  correlation_id: string;
+  contexto: Record<string, unknown>;
+  etapas_realizadas: Etapa[];
+  peso_bruto_kg?: string | null;
+  peso_tara_kg?: string | null;
+  peso_liquido_kg?: string | null;
+  tara_source?: string | null;
+  resultado_status?: string | null;
+  resultado_motivo?: string | null;
+  delta_pre_operacao_kg?: string | null;
+  delta_pos_operacao_kg?: string | null;
+  created_at: string;
+  updated_at: string;
 }
 
 /** Animal ATIVO da(s) fazenda(s) vinculada(s) ao dispositivo — cache local
@@ -158,6 +221,7 @@ export interface OfflineAuthLocal {
 
 class BalancaDB extends Dexie {
   ordens!: EntityTable<OrdemPendenteLocal, "id">;
+  operacoes!: EntityTable<OperacaoLocal, "operation_local_id">;
   pesagens!: EntityTable<PesagemLocal, "local_id">;
   sync_queue!: EntityTable<SyncQueueItem, "id">;
   session!: EntityTable<SessionRow, "id">;
@@ -192,6 +256,17 @@ class BalancaDB extends Dexie {
     });
     this.version(7).stores({ pesagens: "local_id, ordem_id, server_id, synced, installation_id" });
     this.version(8).stores({ offline_auths: "id, expires_at" });
+    this.version(9).stores({
+      operacoes: "operation_local_id, ordem_id, status_local, reconciliation_status, referencia_externa",
+      pesagens: "local_id, operation_local_id, ordem_id, server_id, synced, installation_id",
+    });
+    // 02D: the new operation/capture dimensions are stored as optional object
+    // fields. Keeping the same indexes makes this an additive upgrade without
+    // rewriting or clearing existing queued records.
+    this.version(10).stores({
+      operacoes: "operation_local_id, ordem_id, status_local, reconciliation_status, referencia_externa",
+      pesagens: "local_id, operation_local_id, ordem_id, server_id, synced, installation_id",
+    });
   }
 }
 
@@ -248,7 +323,25 @@ export async function etapasFeitas(ordem: OrdemPendenteLocal): Promise<Etapa[]> 
   return Array.from(set);
 }
 
+export async function etapasFeitasOperacao(operacao: OperacaoLocal): Promise<Etapa[]> {
+  const locais = await db.pesagens.where("operation_local_id").equals(operacao.operation_local_id).toArray();
+  return Array.from(new Set<Etapa>([...operacao.etapas_realizadas, ...locais.map((p) => p.etapa)]));
+}
+
 export function proximaEtapa(tipoPesagem: TipoPesagem, feitas: Etapa[]): Etapa | null {
+  if (tipoPesagem === "MULTIPLA") {
+    if (!feitas.includes("PRE_OPERACAO")) return "PRE_OPERACAO";
+    if (!feitas.includes("POS_OPERACAO")) return "POS_OPERACAO";
+    return null;
+  }
   const esperadas = ETAPAS_POR_TIPO_PESAGEM[tipoPesagem];
   return esperadas.find((e) => !feitas.includes(e)) ?? null;
+}
+
+export function acoesMultipla(capturas: Pick<PesagemLocal, "etapa" | "finalidade">[]): Etapa[] {
+  const temPre = capturas.some((captura) => captura.etapa === "PRE_OPERACAO");
+  const temPos = capturas.some((captura) => captura.etapa === "POS_OPERACAO");
+  if (!temPre) return ["PRE_OPERACAO", "CHEGADA"];
+  if (!temPos) return ["POS_OPERACAO", "INTERMEDIARIA", "PRE_OPERACAO"];
+  return ["SAIDA", "POS_OPERACAO"];
 }

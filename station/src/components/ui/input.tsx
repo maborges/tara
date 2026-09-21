@@ -15,7 +15,7 @@ function Input({ className, type, autoComplete = "off", ...props }: React.Compon
       {...localeProps}
       data-slot="input"
       className={cn(
-        "h-8 w-full min-w-0 rounded-sm border border-primary/20 bg-background px-3 py-1 text-sm font-normal transition-all duration-300 outline-none placeholder:text-muted-foreground/30 focus-visible:border-primary/60 focus-visible:ring-4 focus-visible:ring-primary/5 disabled:pointer-events-none disabled:cursor-not-allowed disabled:bg-muted/50 disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-2 aria-invalid:ring-destructive/20 dark:border-primary/35 dark:focus-visible:border-primary/50 md:text-sm",
+        "h-10 w-full min-w-0 rounded-xl border border-border bg-background px-4 py-2 text-base font-medium transition-all duration-300 outline-none placeholder:text-muted-foreground/50 focus-visible:border-primary focus-visible:ring-4 focus-visible:ring-primary/20 disabled:pointer-events-none disabled:cursor-not-allowed disabled:bg-muted/50 disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-2 aria-invalid:ring-destructive/20 shadow-sm hover:border-primary/50",
         className
       )}
       {...props}

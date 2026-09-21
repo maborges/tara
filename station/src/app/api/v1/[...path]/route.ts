@@ -41,7 +41,11 @@ function mapStandalonePath(path: string[]) {
     "balanca/operadores/ativos": "/v1/stations/operators",
     "balanca/operadores/login": "/v1/stations/operators/login",
     "balanca/provisioning": "/v1/stations/provisioning",
+    "balanca/stations/offline-authorizations/replenish": "/v1/stations/offline-authorizations/replenish",
   };
+  if (joined.startsWith("balanca/stations/orders/")) {
+    return `/v1/stations/orders/${joined.slice("balanca/stations/orders/".length)}`;
+  }
   return mappings[joined] || `/api/v1/${joined}`;
 }
 

@@ -79,23 +79,23 @@ export default function HomePage() {
   if (!mounted || session) return null;
 
   return (
-    <main className="flex min-h-screen items-center justify-center p-6 bg-muted/30">
-      <Card className="w-full max-w-sm">
+    <main className="flex min-h-screen items-center justify-center p-6 animated-gradient-bg">
+      <Card className="w-full max-w-sm glass-panel-heavy border-0">
         <form onSubmit={handleAtivar}>
-          <CardHeader className="text-center">
-            <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-primary font-bold text-white shadow-lg text-xl">
+          <CardHeader className="text-center pt-8">
+            <div className="mx-auto mb-6 flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-tr from-primary to-primary/80 shadow-[0_0_20px_var(--color-primary)] font-bold text-white text-3xl transition-transform hover:scale-105 duration-300">
               T
             </div>
-            <CardTitle className="text-2xl">Ativar Estação Tara</CardTitle>
-            <CardDescription>
-              Insira o código de ativação gerado no painel administrativo.
+            <CardTitle className="text-3xl font-bold tracking-tight">Tara Station</CardTitle>
+            <CardDescription className="text-base mt-2 text-foreground/70">
+              Insira o código de ativação gerado no painel administrativo para configurar este terminal.
             </CardDescription>
           </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-1.5">
-              <label className="text-sm font-medium">Código de ativação</label>
+          <CardContent className="space-y-5 pb-8">
+            <div className="space-y-2">
+              <label className="text-sm font-semibold tracking-wide text-foreground/80">Código de ativação</label>
               <Input
-                className="uppercase tracking-widest"
+                className="h-14 uppercase tracking-[0.25em] text-center font-mono text-lg bg-background/50 focus:bg-background transition-colors focus:ring-primary/50"
                 value={activationCode}
                 onChange={(e) => setActivationCode(e.target.value)}
                 minLength={12}
@@ -103,23 +103,28 @@ export default function HomePage() {
                 required
               />
             </div>
-            <div className="space-y-1.5">
-              <label className="text-sm font-medium">PIN da estação</label>
+            <div className="space-y-2">
+              <label className="text-sm font-semibold tracking-wide text-foreground/80">PIN da estação</label>
               <Input
                 type="password"
+                className="h-14 text-center text-lg tracking-[0.5em] bg-background/50 focus:bg-background transition-colors focus:ring-primary/50"
                 value={pin}
                 onChange={(e) => setPin(e.target.value)}
                 minLength={4}
                 required
               />
             </div>
-            {erro && <p className="text-sm font-medium text-destructive">{erro}</p>}
+            {erro && (
+              <div className="rounded-md bg-destructive/10 p-3 text-sm font-medium text-destructive border border-destructive/20 text-center animate-in fade-in slide-in-from-top-2">
+                {erro}
+              </div>
+            )}
             <Button
               type="submit"
-              className="w-full"
+              className="w-full h-14 text-lg font-bold shadow-lg hover:shadow-primary/25 transition-all active:scale-[0.98] bg-gradient-to-r from-primary to-primary/80 hover:to-primary mt-4"
               disabled={carregando}
             >
-              {carregando ? "Ativando..." : "Ativar estação"}
+              {carregando ? "Ativando..." : "Ativar Estação"}
             </Button>
           </CardContent>
         </form>
