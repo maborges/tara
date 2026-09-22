@@ -12,6 +12,7 @@ interface ContingencyRecord {
   tipo_pesagem: string | null;
   natureza_operacao: string | null;
   modalidade: string | null;
+  origem_operacao: string | null;
   etapa: string;
   numero_ticket: string | null;
   peso_informado_kg: string | null;
@@ -80,6 +81,7 @@ async function toRecord(item: PesagemLocal): Promise<ContingencyRecord> {
     device_configuration_id: item.device_configuration_id ?? null,
     local_id: item.local_id, ordem_id: item.ordem_id, subject_type: item.subject_type,
     tipo_pesagem: item.tipo_pesagem, natureza_operacao: item.natureza_operacao ?? null, modalidade: item.modalidade ?? null,
+    origem_operacao: operacao?.origem_operacao ?? null,
     etapa: item.etapa, numero_ticket: item.numero_ticket,
     peso_informado_kg: item.peso_informado_kg, peso_aferido_kg: item.peso_aferido_kg ?? "0",
     peso_tara_kg: item.peso_tara_kg, captured_via: item.captured_via,

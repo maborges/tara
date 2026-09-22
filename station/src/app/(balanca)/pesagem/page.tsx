@@ -36,7 +36,24 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { PageHeader } from "@/components/shared/page-header";
-import { Activity, Gauge, Search } from "lucide-react";
+import { Activity, Gauge, Search, ArrowLeft, X } from "lucide-react";
+
+const STATUS_LOCAL_DESC: Record<string, string> = {
+  PENDENTE_SYNC: "Aguardando sincronização",
+  SINCRONIZANDO: "Sincronizando...",
+  MAPEADA: "Ordem localizada",
+  EM_PESAGEM: "Em pesagem",
+  CONCLUIDA: "Concluída",
+  PENDENTE_RECONCILIACAO: "Aguardando reconciliação",
+  ERRO_SYNC: "Erro na sincronização",
+};
+
+const ESTADO_RECONCILIACAO_DESC: Record<string, string> = {
+  NAO_APLICAVEL: "S/ reconciliação",
+  PENDENTE: "Reconciliação pendente",
+  CONCILIADA: "Conciliada com sucesso",
+  CONFLITO: "Conflito na reconciliação",
+};
 
 type SubjectType = "VEICULO" | "ANIMAL";
 
@@ -90,8 +107,8 @@ export default function PesagemPage() {
       const veiculo = operacao.contexto.veiculo as { placa_cavalo?: string; carretas?: { placa?: string }[] } | undefined;
       const cavalo = (veiculo?.placa_cavalo ?? "").toLowerCase().replace(/-/g, "");
       const carreta = veiculo?.carretas?.some((item) => (item.placa ?? "").toLowerCase().replace(/-/g, "").includes(termo)) ?? false;
-      return operacao.processo.referencia.toLowerCase().replace(/-/g, "").includes(termo)
-        || operacao.referencia_externa.toLowerCase().replace(/-/g, "").includes(termo)
+      return (operacao.processo.referencia || "").toLowerCase().replace(/-/g, "").includes(termo)
+        || (operacao.referencia_externa || "").toLowerCase().replace(/-/g, "").includes(termo)
         || cavalo.includes(termo) || carreta;
     });
   }, [operacoesLocais, buscaOrdem]);
@@ -158,13 +175,9 @@ export default function PesagemPage() {
     [] as AnimalLocal[],
   );
 
-  // Fluxo avulso: sem ordem prévia (estação rodando sozinha, ou a ordem do
-  // processo ainda não chegou). O operador escolhe o tipo antes de pesar; a
-  // ordem "sombra" (origem_tipo=OUTRO) é criada no servidor pelo sync push —
-  // fica pendente de reconciliação no apps/web até alguém associar ao processo real.
-  // Só suporta UNICA: pesagem em múltiplas etapas exige saber o ID da ordem
-  // sombra criada no servidor para anexar a segunda etapa — só disponível
-  // depois de sincronizar, o que a captura avulsa (offline) não garante.
+  // Operação LOCAL: criada na Station com ou sem conectividade. A origem é
+  // distinta do estado de sincronização e a autorização pré-carregada segue
+  // obrigatória mesmo quando a rede está disponível.
   const [avulsaConfig, setAvulsaConfig] = useState<{ subject_type: SubjectType } | null>(null);
   const [processoTipo, setProcessoTipo] = useState("ROMANEIO");
   const [processoReferencia, setProcessoReferencia] = useState("");
@@ -177,6 +190,11 @@ export default function PesagemPage() {
   const [motoristaNome, setMotoristaNome] = useState("");
   const [motoristaDocumentoTipo, setMotoristaDocumentoTipo] = useState("CNH");
   const [motoristaDocumentoNumero, setMotoristaDocumentoNumero] = useState("");
+  const [produtoCodigo, setProdutoCodigo] = useState("");
+  const [produtoDescricao, setProdutoDescricao] = useState("");
+  const [pesoDeclarado, setPesoDeclarado] = useState("");
+  const [loteCarga, setLoteCarga] = useState("");
+  const [documentoCarga, setDocumentoCarga] = useState("");
 
   const [pesoAferido, setPesoAferido] = useState("");
   const [pesoInformado, setPesoInformado] = useState("");
@@ -221,7 +239,7 @@ export default function PesagemPage() {
           : proximaEtapa(tipoPesagemNova, [])
       : null;
   const subjectTypeAtivo = ordemSelecionada?.subject_type ?? operacaoSelecionada?.subject_type ?? avulsaConfig?.subject_type ?? null;
-  const origemLabel = ordemSelecionada?.origem_tipo ?? "AVULSA";
+  const origemLabel = ordemSelecionada?.origem_operacao ?? (operacaoSelecionada?.origem_operacao ?? ordemSelecionada?.origem_tipo ?? "AVULSA");
   const naturezaAtiva = ordemSelecionada?.natureza_operacao ?? operacaoSelecionada?.natureza_operacao ?? (avulsaConfig ? naturezaOperacaoNova : null);
   const finalidadeEfetiva: FinalidadeCaptura = tipoPesagemAtivo === "MULTIPLA" && etapaAtual && capturasParaFluxo.some((captura) => captura.etapa === etapaAtual)
     ? (finalidadeCaptura === "OPERACIONAL" ? "CONFERENCIA" : finalidadeCaptura)
@@ -238,6 +256,12 @@ export default function PesagemPage() {
     setFinalidadeCaptura("OPERACIONAL");
     setMetodoMedicao("ESTATICA");
     setPlaca("");
+    setProcessoReferencia("");
+    setProdutoCodigo("");
+    setProdutoDescricao("");
+    setPesoDeclarado("");
+    setLoteCarga("");
+    setDocumentoCarga("");
     setAnimalSelecionado(null);
     setBuscaAnimal("");
     setCapturedVia("MANUAL");
@@ -338,8 +362,8 @@ export default function PesagemPage() {
 
       let operacaoAtiva = operacaoSelecionada;
       if (avulsaConfig) {
-        if (!processoReferencia.trim() || !placa.trim() || !motoristaNome.trim() || !motoristaDocumentoNumero.trim()) {
-          setMensagem("Informe processo, placa do cavalo e identificação do motorista antes de capturar.");
+        if (!processoTipo.trim() || !placa.trim() || !motoristaNome.trim() || !motoristaDocumentoNumero.trim()) {
+          setMensagem("Informe o tipo de processo, placa do cavalo e identificação do motorista antes de capturar.");
           setSalvando(false);
           return;
         }
@@ -348,22 +372,36 @@ export default function PesagemPage() {
           .map((placaCarreta) => placaCarreta.replace(/[^a-zA-Z0-9]/g, "").toUpperCase())
           .filter(Boolean)
           .map((placaCarreta) => ({ placa: placaCarreta }));
+        const carga = (produtoCodigo.trim() || produtoDescricao.trim() || pesoDeclarado.trim() || loteCarga.trim() || documentoCarga.trim())
+          ? {
+              produto: (produtoCodigo.trim() || produtoDescricao.trim()) ? {
+                ...(produtoCodigo.trim() ? { codigo_externo: produtoCodigo.trim().toUpperCase() } : {}),
+                ...(produtoDescricao.trim() ? { descricao: produtoDescricao.trim() } : {}),
+              } : undefined,
+              ...(pesoDeclarado.trim() ? { peso_declarado_kg: Number(pesoDeclarado.replace(",", ".")) } : {}),
+              ...(loteCarga.trim() ? { lote: loteCarga.trim() } : {}),
+              ...(documentoCarga.trim() ? { documentos: [{ tipo: "NF", numero: documentoCarga.trim() }] } : {}),
+            }
+          : undefined;
         const contexto = {
-          processo: { tipo: processoTipo.trim().toUpperCase(), referencia: processoReferencia.trim().toUpperCase() },
+          processo: { tipo: processoTipo.trim().toUpperCase(), referencia: processoReferencia.trim() ? processoReferencia.trim().toUpperCase() : null },
           veiculo: { placa_cavalo: placa.replace(/[^a-zA-Z0-9]/g, "").toUpperCase(), carretas: placasNormalizadas },
           motorista: { nome: motoristaNome.trim(), documento: { tipo: motoristaDocumentoTipo, numero: motoristaDocumentoNumero.trim() } },
+          ...(carga ? { carga } : {}),
         };
         operacaoAtiva = {
           operation_local_id: crypto.randomUUID(),
           ordem_id: null,
           status_local: "PENDENTE_SYNC",
           reconciliation_status: "PENDENTE",
+          origem_operacao: "LOCAL",
+          estado_reconciliacao: "PENDENTE",
           subject_type: "VEICULO",
           tipo_pesagem: tipoPesagemNova,
           natureza_operacao: tipoPesagemNova === "MULTIPLA" ? naturezaOperacaoNova : null,
           modalidade: tipoPesagemNova === "MULTIPLA" ? "MULTIPLA" : "UNICA",
           processo: contexto.processo,
-          referencia_externa: contexto.processo.referencia,
+          referencia_externa: null,
           correlation_id: crypto.randomUUID(),
           contexto,
           etapas_realizadas: [],
@@ -435,6 +473,7 @@ export default function PesagemPage() {
         setCapturedVia("MANUAL");
         setLeituraBrutaUsada(null);
         setMensagem(`Etapa "${ETAPA_LABEL[etapaAtual]}" registrada. Escolha a próxima ação.`);
+        window.scrollTo({ top: 0, behavior: "smooth" });
         void runSyncCycle();
         setSalvando(false);
         return;
@@ -463,6 +502,7 @@ export default function PesagemPage() {
           setCapturedVia("MANUAL");
           setLeituraBrutaUsada(null);
           setMensagem(`Etapa "${ETAPA_LABEL[etapaAtual]}" registrada. Falta: ${ETAPA_LABEL[restantes[0]]}.`);
+          window.scrollTo({ top: 0, behavior: "smooth" });
           void runSyncCycle();
           setSalvando(false);
           return;
@@ -471,6 +511,7 @@ export default function PesagemPage() {
 
       voltarParaLista();
       setMensagem("Pesagem registrada. Sincronizando quando houver conexão.");
+      window.scrollTo({ top: 0, behavior: "smooth" });
       void runSyncCycle();
     } finally {
       setSalvando(false);
@@ -486,12 +527,13 @@ export default function PesagemPage() {
         icon={<Activity className="size-6" />}
         actions={
           <>
-            <Button variant="ghost" size="sm" onClick={() => clearOperadorSessao()}>
+            <Button variant="outline" size="sm" onClick={() => clearOperadorSessao()}>
               Trocar operador
             </Button>
             {falhasSync ? (
               <Button
-                variant="destructive" size="sm"
+                variant="outline" size="sm"
+                className="border-destructive text-destructive hover:bg-destructive/10"
                 onClick={async () => {
                   await retryFailedSync();
                   void runSyncCycle();
@@ -513,7 +555,7 @@ export default function PesagemPage() {
             >
               Exportar contingência
             </Button>
-            <div className="flex items-center gap-2 px-2 text-sm text-muted-foreground border-l border-r border-border mx-1">
+            <div className="flex items-center gap-2 px-2 text-sm text-muted-foreground border-l border-r border-border mx-1 h-8">
               <span
                 className={`size-2.5 rounded-full ${
                   session.bridge_url && leituraBalanca.conectado && !leituraBalanca.stale
@@ -538,7 +580,7 @@ export default function PesagemPage() {
               Conectar Balança
             </Button>
             <Button
-              variant="ghost" size="sm" className="text-destructive hover:text-destructive hover:bg-destructive/10"
+              variant="outline" size="sm" className="border-destructive text-destructive hover:bg-destructive/10"
               onClick={async () => {
                 await clearSession();
                 router.replace("/");
@@ -595,8 +637,8 @@ export default function PesagemPage() {
       )}
 
       {mensagem && (
-        <div className="flex items-center justify-between gap-3 rounded-md border border-secondary/30 bg-secondary/10 p-4 text-sm text-secondary-foreground shadow-sm">
-          <p className="font-medium">{mensagem}</p>
+        <div className="flex items-center justify-between gap-3 rounded-lg border border-border bg-card p-4 text-sm font-medium text-foreground shadow-sm">
+          <p className="font-semibold text-base">{mensagem}</p>
           {ticketOrdemId && (
             <Button
               type="button"
@@ -691,13 +733,13 @@ export default function PesagemPage() {
 
           {operacoesFiltradas.length > 0 && (
             <div className="space-y-3 border-t border-border pt-5">
-              <h2 className="text-sm font-bold uppercase tracking-wider text-muted-foreground">Operações criadas nesta Station</h2>
+              <h2 className="text-sm font-bold uppercase tracking-wider text-muted-foreground">Operações criadas neste terminal</h2>
               {operacoesFiltradas.map((operacao) => {
                 const veiculo = operacao.contexto.veiculo as { placa_cavalo?: string } | undefined;
                 return <button key={operacao.operation_local_id} className="w-full rounded-xl border border-primary/20 bg-primary/5 p-4 text-left hover:border-primary/50" onClick={() => {
                   setOrdemSelecionadaId(null); setEtapaMultiplaSelecionada(null); setOperacaoSelecionadaId(operacao.operation_local_id); setPlaca(veiculo?.placa_cavalo ?? "");
                 }}>
-                  <div className="flex justify-between gap-3"><strong>{operacao.processo.referencia}</strong><span className="text-xs text-muted-foreground">{operacao.status_local}</span></div>
+                  <div className="flex justify-between gap-3"><strong>{operacao.processo.referencia || "Operação local"}</strong><span className="text-xs text-muted-foreground">{STATUS_LOCAL_DESC[operacao.status_local] || operacao.status_local} · {ESTADO_RECONCILIACAO_DESC[operacao.estado_reconciliacao] || operacao.estado_reconciliacao}</span></div>
                   <p className="mt-1 text-sm text-muted-foreground">{operacao.processo.tipo} · cavalo {veiculo?.placa_cavalo ?? "—"} · {operacao.tipo_pesagem}{operacao.natureza_operacao ? ` · ${operacao.natureza_operacao}` : ""}</p>
                 </button>;
               })}
@@ -711,7 +753,7 @@ export default function PesagemPage() {
             </p>
             <Button
               variant="outline"
-              className="w-full h-14 border-dashed border-2 text-muted-foreground font-semibold hover:text-foreground hover:border-primary/50"
+              className="w-full h-12 border-dashed border-2 text-muted-foreground font-bold hover:text-foreground hover:border-primary/50 transition-colors"
               onClick={() => setAvulsaConfig({ subject_type: "VEICULO" })}
             >
               Pesagem avulsa (sem ordem)
@@ -722,9 +764,9 @@ export default function PesagemPage() {
         <>
           {avulsaConfig && (
             <Card className="mb-6 shadow-sm border-primary/20 bg-primary/5">
-              <CardHeader className="pb-3">
-                <Button variant="ghost" size="sm" className="-ml-2 w-fit h-8 text-muted-foreground mb-2" onClick={voltarParaLista}>
-                  ← Voltar
+              <CardHeader className="pb-3 flex flex-row items-center gap-3 space-y-0">
+                <Button variant="outline" size="icon" className="h-8 w-8 shrink-0 rounded-full bg-background" onClick={voltarParaLista}>
+                  <ArrowLeft className="size-4" />
                 </Button>
                 <CardTitle className="text-lg">Nova operação de pesagem</CardTitle>
               </CardHeader>
@@ -741,7 +783,7 @@ export default function PesagemPage() {
                       <option value="RECEBIMENTO">Recebimento</option><option value="EXPEDICAO">Expedição</option><option value="TRANSFERENCIA">Transferência</option><option value="OUTRO">Outro</option>
                     </select>
                   </div>
-                  <div className="space-y-1.5"><label className="text-sm font-semibold">Referência <span className="text-destructive">*</span></label><Input className="h-11" value={processoReferencia} onChange={(e) => setProcessoReferencia(e.target.value)} placeholder="ROM-84721" /></div>
+                  <div className="space-y-1.5"><label className="text-sm font-semibold">Referência informada</label><Input className="h-11" value={processoReferencia} onChange={(e) => setProcessoReferencia(e.target.value)} placeholder="Opcional — ROM-84721" /></div>
                   <div className="space-y-1.5"><label className="text-sm font-semibold">Modalidade</label><select className="flex h-11 w-full rounded-md border border-input bg-background px-3 text-sm" value={tipoPesagemNova} onChange={(e) => setTipoPesagemNova(e.target.value as TipoPesagem)}><option value="UNICA">Única</option><option value="DUPLA">Dupla</option><option value="DUPLA_ENTRADA_DESCARGA">Dupla entrada/descarga</option><option value="DUPLA_SAIDA_CARREGAMENTO">Dupla saída/carregamento</option><option value="MULTIPLA">Múltiplas capturas</option></select></div>
                 </div>
                 {tipoPesagemNova === "MULTIPLA" && (
@@ -750,15 +792,16 @@ export default function PesagemPage() {
                 <div className="space-y-1.5"><label className="text-sm font-semibold">Placa do cavalo <span className="text-destructive">*</span></label><Input value={placa} onChange={(e) => setPlaca(e.target.value.toUpperCase())} placeholder="ABC1D23" /></div>
                 <div className="space-y-2"><label className="text-sm font-semibold">Carretas</label>{placasCarretas.map((placaCarreta, index) => <div className="flex gap-2" key={index}><Input value={placaCarreta} onChange={(e) => setPlacasCarretas(placasCarretas.map((value, position) => position === index ? e.target.value.toUpperCase() : value))} placeholder="DEF4G56" /><Button type="button" variant="outline" onClick={() => setPlacasCarretas(placasCarretas.filter((_, position) => position !== index))}>Remover</Button></div>)}<Button type="button" variant="outline" onClick={() => setPlacasCarretas([...placasCarretas, ""])}>+ Adicionar carreta</Button></div>
                 <div className="grid gap-3 sm:grid-cols-4"><div className="space-y-1.5 sm:col-span-2"><label className="text-sm font-semibold">Motorista <span className="text-destructive">*</span></label><Input className="h-11" value={motoristaNome} onChange={(e) => setMotoristaNome(e.target.value)} /></div><div className="space-y-1.5"><label className="text-sm font-semibold">Documento</label><select className="flex h-11 w-full rounded-md border border-input bg-background px-3 text-sm" value={motoristaDocumentoTipo} onChange={(e) => setMotoristaDocumentoTipo(e.target.value)}><option>CNH</option><option>CPF</option><option>RG</option><option>OUTRO</option></select></div><div className="space-y-1.5"><label className="text-sm font-semibold">Número <span className="text-destructive">*</span></label><Input className="h-11" value={motoristaDocumentoNumero} onChange={(e) => setMotoristaDocumentoNumero(e.target.value)} /></div></div>
-                <p className="text-xs text-muted-foreground">Produto, NF e observações são complementares e não bloqueiam esta captura.</p>
+                <div className="grid gap-3 sm:grid-cols-2"><div className="space-y-1.5"><label className="text-sm font-semibold">Produto — código externo</label><Input value={produtoCodigo} onChange={(e) => setProdutoCodigo(e.target.value)} placeholder="CAF-001" /></div><div className="space-y-1.5"><label className="text-sm font-semibold">Produto — descrição</label><Input value={produtoDescricao} onChange={(e) => setProdutoDescricao(e.target.value)} placeholder="Café Arábica" /></div><div className="space-y-1.5"><label className="text-sm font-semibold">Peso declarado (kg)</label><Input inputMode="decimal" value={pesoDeclarado} onChange={(e) => setPesoDeclarado(e.target.value)} placeholder="30000" /></div><div className="space-y-1.5"><label className="text-sm font-semibold">Lote</label><Input value={loteCarga} onChange={(e) => setLoteCarga(e.target.value)} placeholder="LT-001" /></div><div className="space-y-1.5"><label className="text-sm font-semibold">Documento da carga</label><Input value={documentoCarga} onChange={(e) => setDocumentoCarga(e.target.value)} placeholder="NF 123456" /></div></div>
+                <p className="text-xs text-muted-foreground">Carga, documentos, carretas e referência são contexto complementar; não é necessário informar NF para pesar.</p>
               </CardContent>
             </Card>
           )}
 
           <form onSubmit={handleRegistrarPeso} className="space-y-3 rounded-xl border border-border bg-card p-4 shadow-sm relative flex-1 flex flex-col justify-center">
             {!avulsaConfig && (
-              <Button type="button" variant="ghost" size="sm" className="absolute top-3 right-3 text-muted-foreground" onClick={voltarParaLista}>
-                ✕ Cancelar
+              <Button type="button" variant="outline" size="sm" className="absolute top-3 right-3 text-muted-foreground h-8" onClick={voltarParaLista}>
+                <X className="size-4 mr-1.5" /> Cancelar
               </Button>
             )}
             <div>

@@ -471,13 +471,15 @@ class Ordem(Base):
     cliente_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("tara.clientes.id"), nullable=False)
     sistema_cliente: Mapped[str] = mapped_column(String(80), nullable=False)
     tenant_cliente_id: Mapped[str] = mapped_column(String(120), nullable=False)
-    referencia_externa: Mapped[str] = mapped_column(String(180), nullable=False)
+    referencia_externa: Mapped[str | None] = mapped_column(String(180), nullable=True)
     operation_local_id: Mapped[str | None] = mapped_column(String(120), nullable=True)
     correlation_id: Mapped[str] = mapped_column(String(120), nullable=False)
     subject_type: Mapped[str] = mapped_column(String(20), nullable=False)
     tipo_pesagem: Mapped[str] = mapped_column(String(30), nullable=False)
     natureza_operacao: Mapped[str | None] = mapped_column(String(30), nullable=True)
     modalidade: Mapped[str | None] = mapped_column(String(15), nullable=True)
+    origem_operacao: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    reconciliation_status: Mapped[str | None] = mapped_column(String(20), nullable=True)
     contexto: Mapped[dict] = mapped_column(JSONB, nullable=False)
     status: Mapped[str] = mapped_column(String(40), nullable=False)
     peso_liquido_kg: Mapped[Decimal | None] = mapped_column(Numeric(12, 3), nullable=True)
@@ -564,6 +566,27 @@ class OrdemResultadoHistorico(Base):
     delta_pre_operacao_kg: Mapped[Decimal | None] = mapped_column(Numeric(12, 3), nullable=True)
     delta_pos_operacao_kg: Mapped[Decimal | None] = mapped_column(Numeric(12, 3), nullable=True)
     calculado_em: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+
+
+class OrdemReconciliacaoAuditoria(Base):
+    __tablename__ = "ordem_reconciliacoes_auditoria"
+    __table_args__ = (
+        Index("ix_TARA_ordem_reconciliacao_auditoria_ordem", "tenant_id", "ordem_id", "decidido_em"),
+        {"schema": "tara", "comment": "Auditoria das decisões de origem e reconciliação da operação."},
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
+    tenant_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    ordem_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("tara.ordens.id", ondelete="CASCADE"), nullable=False)
+    estado_anterior: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    estado_novo: Mapped[str] = mapped_column(String(20), nullable=False)
+    sistema_cliente: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    referencia_externa: Mapped[str | None] = mapped_column(String(180), nullable=True)
+    decidido_em: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    ator_user_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("tara.usuarios.id"), nullable=True)
+    ator_client_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("tara.api_clients.id"), nullable=True)
+    motivo: Mapped[str] = mapped_column(String(500), nullable=False)
+    tipo_decisao: Mapped[str] = mapped_column(String(30), nullable=False)
 
 
 class ContingenciaLote(Base):

@@ -331,6 +331,7 @@ class ContingencyRecordIn(BaseModel):
     tipo_pesagem: str | None = Field(default=None, max_length=30)
     natureza_operacao: Literal["RECEBIMENTO", "EXPEDICAO", "TRANSFERENCIA", "DEVOLUCAO", "OUTRA"] | None = None
     modalidade: Literal["UNICA", "MULTIPLA"] | None = None
+    origem_operacao: Literal["EXTERNA", "LOCAL"] | None = None
     etapa: str = Field(min_length=1, max_length=30)
     numero_ticket: str | None = Field(default=None, max_length=120)
     peso_informado_kg: str | None = None
@@ -375,9 +376,9 @@ class UserBootstrapIn(BaseModel):
 
 
 class OrderIn(BaseModel):
-    client_system: str = Field(min_length=1, max_length=80)
-    client_tenant_id: str = Field(min_length=1, max_length=120)
-    external_reference: str = Field(min_length=1, max_length=180)
+    client_system: str | None = Field(default=None, min_length=1, max_length=80)
+    client_tenant_id: str | None = Field(default=None, min_length=1, max_length=120)
+    external_reference: str | None = Field(default=None, min_length=1, max_length=180)
     correlation_id: str = Field(min_length=1, max_length=120)
     subject_type: Literal["VEICULO", "ANIMAL"]
     tipo_pesagem: Literal[
@@ -389,6 +390,8 @@ class OrderIn(BaseModel):
     ] | None = None
     natureza_operacao: Literal["RECEBIMENTO", "EXPEDICAO", "TRANSFERENCIA", "DEVOLUCAO", "OUTRA"] | None = None
     modalidade: Literal["UNICA", "MULTIPLA"] | None = None
+    origem_operacao: Literal["EXTERNA", "LOCAL"] | None = None
+    operation_local_id: str | None = Field(default=None, max_length=120)
     contexto: dict[str, Any] = Field(default_factory=dict)
 
 
@@ -397,8 +400,11 @@ class OrderOut(BaseModel):
     id: uuid.UUID
     sistema_cliente: str
     tenant_cliente_id: str
-    referencia_externa: str
+    referencia_externa: str | None
     correlation_id: str
+    operation_local_id: str | None = None
+    origem_operacao: str | None = None
+    reconciliation_status: str | None = None
     subject_type: str
     tipo_pesagem: str
     natureza_operacao: str | None = None
@@ -624,19 +630,45 @@ class WeighingReconciliationIn(BaseModel):
     ordem: OrderIn | None = None
 
 
+class OperationReconciliationIn(BaseModel):
+    decision: Literal["CONCILIAR", "ENCERRAR_LOCAL", "MARCAR_CONFLITO"]
+    sistema_cliente: str | None = Field(default=None, min_length=1, max_length=80)
+    tenant_cliente_id: str | None = Field(default=None, min_length=1, max_length=120)
+    referencia_externa: str | None = Field(default=None, min_length=1, max_length=180)
+    correlation_id: str | None = Field(default=None, min_length=1, max_length=120)
+    contexto: dict[str, Any] = Field(default_factory=dict)
+    motivo: str = Field(min_length=1, max_length=500)
+
+
+class OperationReconciliationAuditOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: uuid.UUID
+    tenant_id: uuid.UUID
+    ordem_id: uuid.UUID
+    estado_anterior: str | None
+    estado_novo: str
+    sistema_cliente: str | None
+    referencia_externa: str | None
+    decidido_em: datetime
+    ator_user_id: uuid.UUID | None
+    ator_client_id: uuid.UUID | None
+    motivo: str
+    tipo_decisao: str
+
+
 class ProcessoOperacionalIn(BaseModel):
     # String controlada pela Station/cliente, deliberadamente extensível: a
     # Plataforma não modela Pedido, Romaneio ou demais domínios do ERP.
     tipo: str = Field(min_length=1, max_length=60)
-    referencia: str = Field(min_length=1, max_length=180)
+    referencia: str | None = Field(default=None, max_length=180)
 
     @field_validator("tipo", "referencia")
     @classmethod
-    def normalize_operational_text(cls, value: str) -> str:
+    def normalize_operational_text(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
         normalized = value.strip().upper()
-        if not normalized:
-            raise ValueError("valor operacional não pode ser vazio")
-        return normalized
+        return normalized or None
 
 
 class VeiculoOperacionalIn(BaseModel):
@@ -660,8 +692,11 @@ class OfflineOperationIn(BaseModel):
     tipo_pesagem: Literal["UNICA", "DUPLA", "DUPLA_ENTRADA_DESCARGA", "DUPLA_SAIDA_CARREGAMENTO", "MULTIPLA"]
     natureza_operacao: Literal["RECEBIMENTO", "EXPEDICAO", "TRANSFERENCIA", "DEVOLUCAO", "OUTRA"] | None = None
     modalidade: Literal["UNICA", "MULTIPLA"] | None = None
+    origem_operacao: Literal["EXTERNA", "LOCAL"] | None = None
+    sistema_cliente: str | None = Field(default=None, min_length=1, max_length=80)
+    tenant_cliente_id: str | None = Field(default=None, min_length=1, max_length=120)
     processo: ProcessoOperacionalIn
-    referencia_externa: str = Field(min_length=1, max_length=180)
+    referencia_externa: str | None = Field(default=None, max_length=180)
     correlation_id: str = Field(min_length=1, max_length=120)
     veiculo: VeiculoOperacionalIn
     motorista: MotoristaOperacionalIn
@@ -733,6 +768,7 @@ class SyncResultOut(BaseModel):
     error_message: str | None = None
     operation_local_id: str | None = None
     ordem_id: uuid.UUID | None = None
+    reconciliation_status: str | None = None
 
 
 class SyncPushOut(BaseModel):

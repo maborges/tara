@@ -9,10 +9,10 @@ from sqlalchemy import and_, or_, select, update, func
 from ..auth import get_session, require_station, set_tenant_context
 from ..security import require_backoffice, require_client_scope
 from ..config import get_settings
-from ..models import ApiClient, Cliente, Conta, DeliveryReceipt, Estacao, EstacaoInstalacao, EstacaoOperador, DeviceConfiguration, BridgeValidation, Operador, Ordem, Outbox, OutboxReplayAudit, Pesagem
+from ..models import ApiClient, Cliente, Conta, DeliveryReceipt, Estacao, EstacaoInstalacao, EstacaoOperador, DeviceConfiguration, BridgeValidation, Operador, Ordem, OrdemReconciliacaoAuditoria, Outbox, OutboxReplayAudit, Pesagem
 from ..schemas import (
     ActivationIn, ActivationOut, AccountOut, ClientIn, ClientOut, EventOut, EventReplayAuditOut, OperatorIn, OperatorOut, ProvisionedOperatorOut, StationProvisioningOut,
-    OrderIn, OrderOut, OrderPageOut, StationIn, StationOut, WeighingIn, WeighingOut, WeighingPageOut, WeighingReconciliationIn, OfficialMarkIn, OfficialMarkOut, OrderResultHistoryOut,
+    OrderIn, OrderOut, OrderPageOut, StationIn, StationOut, WeighingIn, WeighingOut, WeighingPageOut, WeighingReconciliationIn, OfficialMarkIn, OfficialMarkOut, OrderResultHistoryOut, OperationReconciliationIn, OperationReconciliationAuditOut,
     SyncPushIn, SyncPushOut, SyncResultOut, OperatorLoginIn, LoginIn, LoginOut,
     ApiClientIn, ApiClientUpdateIn, ApiClientOut, ApiClientCredentialOut, ApiClientStatusOut, ApiClientListOut,
     ContingencyPackageIn, ContingencyImportOut,
@@ -24,7 +24,7 @@ from .. import models
 from ..contingency_service import import_contingency_package
 from ..operation import (
     activate_station, complete_weighing, create_operator, create_order, create_station,
-    register_client, reconcile_weighing, resolve_offline_operation, set_official_mark, list_official_marks, list_result_history,
+    register_client, reconcile_weighing, resolve_offline_operation, set_official_mark, list_official_marks, list_result_history, set_operation_reconciliation,
 )
 from ..platform_identity import (
     create_api_client, get_account, login_backoffice, login_backoffice_without_tenant,
@@ -211,16 +211,84 @@ async def post_contingency_import(
 
 @router.post("/orders", response_model=OrderOut, status_code=201)
 async def post_order(data: OrderIn, context=Depends(require_client_scope("orders:write"))):
-    tenant_id, session, _client = context
+    tenant_id, session, client = context
     try:
-        order = await create_order(session, tenant_id, data)
+        order = await create_order(session, tenant_id, data, actor_client_id=client.id)
     except ValueError as exc:
         await session.rollback()
         if str(exc).startswith("CONFLICT:"):
             raise HTTPException(status_code=409, detail=str(exc)[len("CONFLICT: "):]) from exc
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     await session.commit()
+    if order.reconciliation_status == "CONFLITO":
+        raise HTTPException(status_code=409, detail="Operação LOCAL mantida em CONFLITO; nenhuma associação externa foi realizada")
     return order
+
+
+@router.post("/orders/{order_id}/reconciliation", response_model=OrderOut)
+async def post_order_reconciliation(
+    order_id: uuid.UUID,
+    data: OperationReconciliationIn,
+    context=Depends(require_client_scope("weighings:reconcile")),
+):
+    tenant_id, session, client = context
+    try:
+        order = await set_operation_reconciliation(
+            session, tenant_id, order_id, data, actor_client_id=client.id,
+        )
+    except ValueError as exc:
+        await session.rollback()
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    await session.commit()
+    if order.reconciliation_status == "CONFLITO":
+        raise HTTPException(status_code=409, detail="Operação mantida em CONFLITO; nenhuma associação externa foi realizada")
+    return order
+
+
+@router.post("/admin/orders/{order_id}/reconciliation", response_model=OrderOut)
+async def post_admin_order_reconciliation(
+    order_id: uuid.UUID,
+    data: OperationReconciliationIn,
+    context=Depends(require_backoffice("backoffice:ordens:gerenciar")),
+):
+    tenant_id, session, user = context
+    try:
+        order = await set_operation_reconciliation(
+            session, tenant_id, order_id, data, actor_user_id=user.id,
+        )
+    except ValueError as exc:
+        await session.rollback()
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    await session.commit()
+    if order.reconciliation_status == "CONFLITO":
+        raise HTTPException(status_code=409, detail="Operação mantida em CONFLITO; nenhuma associação externa foi realizada")
+    return order
+
+
+@router.get("/orders/{order_id}/reconciliation-audit", response_model=list[OperationReconciliationAuditOut])
+async def get_order_reconciliation_audit(
+    order_id: uuid.UUID,
+    context=Depends(require_client_scope("weighings:read")),
+):
+    tenant_id, session, _client = context
+    result = await session.execute(select(OrdemReconciliacaoAuditoria).where(
+        OrdemReconciliacaoAuditoria.tenant_id == tenant_id,
+        OrdemReconciliacaoAuditoria.ordem_id == order_id,
+    ).order_by(OrdemReconciliacaoAuditoria.decidido_em))
+    return list(result.scalars())
+
+
+@router.get("/admin/orders/{order_id}/reconciliation-audit", response_model=list[OperationReconciliationAuditOut])
+async def get_admin_order_reconciliation_audit(
+    order_id: uuid.UUID,
+    context=Depends(require_backoffice("backoffice:ordens:gerenciar")),
+):
+    tenant_id, session, _user = context
+    result = await session.execute(select(OrdemReconciliacaoAuditoria).where(
+        OrdemReconciliacaoAuditoria.tenant_id == tenant_id,
+        OrdemReconciliacaoAuditoria.ordem_id == order_id,
+    ).order_by(OrdemReconciliacaoAuditoria.decidido_em))
+    return list(result.scalars())
 
 
 @router.get("/orders", response_model=OrderPageOut)
@@ -917,6 +985,7 @@ async def post_sync(data: SyncPushIn, context=Depends(require_station)):
                     results.append(SyncResultOut(
                         local_id=item.local_id, status="CONFLICT", error_message=conflict,
                         operation_local_id=operation_local_id,
+                        reconciliation_status="CONFLITO",
                     ))
                     continue
                 
@@ -963,6 +1032,7 @@ async def post_sync(data: SyncPushIn, context=Depends(require_station)):
                 local_id=item.local_id, status="CREATED", server_id=weight.id,
                 operation_local_id=operation_local_id,
                 ordem_id=resolved_order.id if resolved_order else weight.ordem_id,
+                reconciliation_status=resolved_order.reconciliation_status if resolved_order else None,
             ))
         except (KeyError, ValueError) as exc:
             results.append(SyncResultOut(local_id=item.local_id, status="ERROR", error_message=str(exc)))
@@ -999,9 +1069,12 @@ async def get_sync(context=Depends(require_station)):
     orders = [
         {
             "id": str(order.id),
-            "origem_tipo": "OUTRO",
+            "origem_tipo": order.origem_operacao or "OUTRO",
             "origem_id": None,
             "referencia_externa": order.referencia_externa,
+            "operation_local_id": order.operation_local_id,
+            "origem_operacao": order.origem_operacao,
+            "reconciliation_status": order.reconciliation_status,
             "subject_type": order.subject_type,
             "tipo_pesagem": order.tipo_pesagem,
             "natureza_operacao": order.natureza_operacao,

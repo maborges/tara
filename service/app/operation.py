@@ -4,6 +4,7 @@ from datetime import datetime, timedelta
 from decimal import Decimal
 import hashlib
 import uuid
+from copy import deepcopy
 
 from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -19,6 +20,7 @@ from .models import (
     MarcoPesagemOficial,
     Operador,
     Ordem,
+    OrdemReconciliacaoAuditoria,
     OrdemResultadoHistorico,
     Pesagem,
 )
@@ -42,6 +44,7 @@ VALID_STAGES_BY_TYPE: dict[str, set[str]] = {
 }
 
 N_CAPTURE_STAGES = {"CHEGADA", "PRE_OPERACAO", "INTERMEDIARIA", "POS_OPERACAO", "SAIDA"}
+RECONCILIATION_STATES = {"NAO_APLICAVEL", "PENDENTE", "CONCILIADA", "CONFLITO"}
 
 
 async def _get_account(session: AsyncSession, tenant_id: uuid.UUID) -> Conta:
@@ -73,24 +76,178 @@ async def register_client(session: AsyncSession, tenant_id: uuid.UUID, data) -> 
     return client
 
 
-async def create_order(session: AsyncSession, tenant_id: uuid.UUID, data) -> Ordem:
+async def _record_reconciliation_decision(
+    session: AsyncSession,
+    order: Ordem,
+    *,
+    previous: str | None,
+    new: str,
+    sistema_cliente: str | None,
+    referencia_externa: str | None,
+    motivo: str,
+    tipo_decisao: str,
+    actor_user_id: uuid.UUID | None = None,
+    actor_client_id: uuid.UUID | None = None,
+) -> None:
+    session.add(OrdemReconciliacaoAuditoria(
+        id=uuid.uuid4(), tenant_id=order.tenant_id, ordem_id=order.id,
+        estado_anterior=previous, estado_novo=new,
+        sistema_cliente=sistema_cliente, referencia_externa=referencia_externa,
+        decidido_em=datetime.utcnow(), ator_user_id=actor_user_id,
+        ator_client_id=actor_client_id, motivo=motivo, tipo_decisao=tipo_decisao,
+    ))
+
+
+def _context_reconciliation_conflict(local: dict, external: dict) -> str | None:
+    """Return a reason only for relevant context divergence.
+
+    Auxiliary data never selects a candidate. It can only prevent an explicit
+    reconciliation when both sides provide incompatible operational facts.
+    """
+    for key in ("processo", "veiculo", "motorista", "carga"):
+        left, right = local.get(key), external.get(key)
+        if left is not None and right is not None and left != right:
+            return f"Contexto divergente em {key}"
+    return None
+
+
+def _merge_context_without_overwrite(local: dict, external: dict) -> dict:
+    """Enrich local context only with keys not already present."""
+    merged = deepcopy(local or {})
+    for key, value in (external or {}).items():
+        if key not in merged:
+            merged[key] = deepcopy(value)
+        elif isinstance(merged[key], dict) and isinstance(value, dict):
+            merged[key] = _merge_context_without_overwrite(merged[key], value)
+    return merged
+
+
+async def _reconcile_local_order(
+    session: AsyncSession,
+    tenant_id: uuid.UUID,
+    data,
+    *,
+    actor_user_id: uuid.UUID | None = None,
+    actor_client_id: uuid.UUID | None = None,
+) -> Ordem:
+    order = (await session.execute(select(Ordem).where(
+        Ordem.tenant_id == tenant_id,
+        Ordem.operation_local_id == data.operation_local_id,
+    ).with_for_update())).scalar_one_or_none()
+    if order is None:
+        raise ValueError("Operação LOCAL não encontrada para reconciliação")
+    if order.origem_operacao not in {None, "LOCAL"}:
+        raise ValueError("A operação indicada não é LOCAL")
+    if not data.client_system or not data.client_tenant_id or not data.external_reference:
+        raise ValueError("sistema_cliente, tenant_cliente_id e referencia_externa são obrigatórios para EXTERNA")
+
     client = await register_client(session, tenant_id, type("Client", (), {
         "sistema_cliente": data.client_system,
         "tenant_cliente_id": data.client_tenant_id,
         "nome_exibicao": data.client_system,
+    })())
+    existing = (await session.execute(select(Ordem).where(
+        Ordem.tenant_id == tenant_id,
+        Ordem.sistema_cliente == data.client_system,
+        Ordem.referencia_externa == data.external_reference,
+        Ordem.id != order.id,
+    ).with_for_update())).scalar_one_or_none()
+    incoming_modalidade = getattr(data, "modalidade", None) or (
+        "MULTIPLA" if data.tipo_pesagem == "MULTIPLA" else None
+    )
+    if existing is not None:
+        reason = "A identidade externa já está vinculada a outra Ordem"
+    elif (
+        order.tipo_pesagem != data.tipo_pesagem
+        or order.natureza_operacao != getattr(data, "natureza_operacao", None)
+        or order.modalidade != incoming_modalidade
+        or order.subject_type != data.subject_type
+    ):
+        reason = "Dados operacionais externos incompatíveis com a operação LOCAL"
+    else:
+        reason = _context_reconciliation_conflict(order.contexto or {}, data.contexto or {})
+    if reason:
+        previous = order.reconciliation_status or "PENDENTE"
+        order.reconciliation_status = "CONFLITO"
+        await _record_reconciliation_decision(
+            session, order, previous=previous, new="CONFLITO",
+            sistema_cliente=data.client_system, referencia_externa=data.external_reference,
+            motivo=reason, tipo_decisao="CONCILIAR",
+            actor_user_id=actor_user_id, actor_client_id=actor_client_id,
+        )
+        await session.flush()
+        return order
+
+    previous = order.reconciliation_status or "PENDENTE"
+    order.cliente_id = client.id
+    order.sistema_cliente = data.client_system
+    order.tenant_cliente_id = data.client_tenant_id
+    order.referencia_externa = data.external_reference
+    order.correlation_id = data.correlation_id
+    order.origem_operacao = "LOCAL"
+    order.reconciliation_status = "CONCILIADA"
+    order.contexto = _merge_context_without_overwrite(order.contexto or {}, data.contexto or {})
+    await _record_reconciliation_decision(
+        session, order, previous=previous, new="CONCILIADA",
+        sistema_cliente=data.client_system, referencia_externa=data.external_reference,
+        motivo="Operação LOCAL vinculada explicitamente à solicitação externa",
+        tipo_decisao="CONCILIAR", actor_user_id=actor_user_id,
+        actor_client_id=actor_client_id,
+    )
+    await session.flush()
+    return order
+
+
+async def create_order(
+    session: AsyncSession,
+    tenant_id: uuid.UUID,
+    data,
+    *,
+    actor_user_id: uuid.UUID | None = None,
+    actor_client_id: uuid.UUID | None = None,
+) -> Ordem:
+    origin = getattr(data, "origem_operacao", None) or "EXTERNA"
+    if origin not in {"EXTERNA", "LOCAL"}:
+        raise ValueError("origem_operacao inválida")
+    if origin == "LOCAL" and not getattr(data, "operation_local_id", None):
+        raise ValueError("operation_local_id é obrigatório para uma operação LOCAL")
+    if origin == "EXTERNA":
+        if not data.client_system or not data.client_tenant_id or not data.external_reference:
+            raise ValueError("sistema_cliente, tenant_cliente_id e referencia_externa são obrigatórios para EXTERNA")
+        if getattr(data, "operation_local_id", None):
+            return await _reconcile_local_order(
+                session, tenant_id, data,
+                actor_user_id=actor_user_id, actor_client_id=actor_client_id,
+            )
+    elif getattr(data, "operation_local_id", None):
+        mapped = (await session.execute(select(Ordem).where(
+            Ordem.tenant_id == tenant_id,
+            Ordem.operation_local_id == data.operation_local_id,
+        ))).scalar_one_or_none()
+        if mapped is not None:
+            return mapped
+    client_system = data.client_system or "tara-local"
+    client_tenant_id = data.client_tenant_id or str(tenant_id)
+    client = await register_client(session, tenant_id, type("Client", (), {
+        "sistema_cliente": client_system,
+        "tenant_cliente_id": client_tenant_id,
+        "nome_exibicao": client_system,
     })())
     modalidade = getattr(data, "modalidade", None) or ("MULTIPLA" if data.tipo_pesagem == "MULTIPLA" else None)
     natureza_operacao = getattr(data, "natureza_operacao", None)
     tipo_pesagem = data.tipo_pesagem or ("MULTIPLA" if modalidade == "MULTIPLA" else "UNICA")
     if modalidade == "MULTIPLA" and not natureza_operacao:
         raise ValueError("natureza_operacao é obrigatória para uma operação MULTIPLA")
-    existing = (await session.execute(select(Ordem).where(
-        Ordem.cliente_id == client.id,
-        Ordem.referencia_externa == data.external_reference,
-    ))).scalar_one_or_none()
+    existing = None
+    if data.external_reference is not None:
+        existing = (await session.execute(select(Ordem).where(
+            Ordem.tenant_id == tenant_id,
+            Ordem.sistema_cliente == client_system,
+            Ordem.referencia_externa == data.external_reference,
+        ))).scalar_one_or_none()
     if existing:
         same_request = (
-            existing.tenant_cliente_id == data.client_tenant_id
+            existing.tenant_cliente_id == client_tenant_id
             and existing.correlation_id == data.correlation_id
             and existing.subject_type == data.subject_type
             and existing.tipo_pesagem == tipo_pesagem
@@ -103,11 +260,13 @@ async def create_order(session: AsyncSession, tenant_id: uuid.UUID, data) -> Ord
         raise ValueError("CONFLICT: referência externa já existe com dados incompatíveis")
     order = Ordem(
         id=uuid.uuid4(), tenant_id=tenant_id, cliente_id=client.id,
-        sistema_cliente=data.client_system, tenant_cliente_id=data.client_tenant_id,
+        sistema_cliente=client_system, tenant_cliente_id=client_tenant_id,
         referencia_externa=data.external_reference, correlation_id=data.correlation_id,
         operation_local_id=getattr(data, "operation_local_id", None),
         subject_type=data.subject_type, tipo_pesagem=tipo_pesagem,
         natureza_operacao=natureza_operacao, modalidade=modalidade,
+        origem_operacao=origin,
+        reconciliation_status="PENDENTE" if origin == "LOCAL" else "NAO_APLICAVEL",
         contexto=data.contexto,
         status="EM_PESAGEM" if modalidade == "MULTIPLA" else "PENDENTE",
         created_at=datetime.utcnow(),
@@ -188,10 +347,21 @@ async def resolve_offline_operation(session: AsyncSession, tenant_id: uuid.UUID,
     if mapped is not None:
         return mapped, None
 
-    candidates = list((await session.execute(select(Ordem).where(
-        Ordem.tenant_id == tenant_id,
-        Ordem.referencia_externa == data.referencia_externa,
-    ))).scalars())
+    # A new LOCAL operation never binds by an optional reference or by
+    # auxiliary context.  Legacy payloads without origem_operacao retain the
+    # previous reference-based behavior for compatibility.
+    origin = getattr(data, "origem_operacao", None)
+    if origin == "EXTERNA" and (not getattr(data, "sistema_cliente", None) or not data.referencia_externa):
+        return None, "Operação EXTERNA exige sistema_cliente e referencia_externa"
+    candidates = []
+    if origin != "LOCAL" and data.referencia_externa:
+        stmt = select(Ordem).where(
+            Ordem.tenant_id == tenant_id,
+            Ordem.referencia_externa == data.referencia_externa,
+        )
+        if origin == "EXTERNA" and getattr(data, "sistema_cliente", None):
+            stmt = stmt.where(Ordem.sistema_cliente == data.sistema_cliente)
+        candidates = list((await session.execute(stmt)).scalars())
     if len(candidates) > 1:
         return None, "Conflito: mais de uma Ordem possui a mesma referência externa"
     if candidates:
@@ -212,18 +382,83 @@ async def resolve_offline_operation(session: AsyncSession, tenant_id: uuid.UUID,
         return existing, None
 
     order_data = type("OfflineOrder", (), {
-        "client_system": "station-offline",
-        "client_tenant_id": str(tenant_id),
+        "client_system": getattr(data, "sistema_cliente", None) or "tara-local",
+        "client_tenant_id": getattr(data, "tenant_cliente_id", None) or str(tenant_id),
         "external_reference": data.referencia_externa,
         "correlation_id": data.correlation_id,
         "subject_type": data.subject_type,
         "tipo_pesagem": data.tipo_pesagem,
         "natureza_operacao": getattr(data, "natureza_operacao", None),
         "modalidade": getattr(data, "modalidade", None),
+        "origem_operacao": origin or "LOCAL",
         "contexto": context,
         "operation_local_id": data.operation_local_id,
     })()
     return await create_order(session, tenant_id, order_data), None
+
+
+async def set_operation_reconciliation(
+    session: AsyncSession,
+    tenant_id: uuid.UUID,
+    ordem_id: uuid.UUID,
+    data,
+    *,
+    actor_user_id: uuid.UUID | None = None,
+    actor_client_id: uuid.UUID | None = None,
+) -> Ordem:
+    """Apply an explicit, auditable operation-level decision."""
+    order = (await session.execute(select(Ordem).where(
+        Ordem.id == ordem_id, Ordem.tenant_id == tenant_id,
+    ).with_for_update())).scalar_one_or_none()
+    if order is None:
+        raise ValueError("Ordem não encontrada para o tenant")
+    if order.origem_operacao not in {None, "LOCAL"} and data.decision != "ENCERRAR_LOCAL":
+        raise ValueError("Somente operações LOCAL podem receber decisão de reconciliação")
+
+    previous = order.reconciliation_status or "PENDENTE"
+    if data.decision == "ENCERRAR_LOCAL":
+        if order.origem_operacao not in {None, "LOCAL"}:
+            raise ValueError("Apenas operação LOCAL pode ser encerrada sem processo externo")
+        order.origem_operacao = "LOCAL"
+        order.reconciliation_status = "NAO_APLICAVEL"
+        await _record_reconciliation_decision(
+            session, order, previous=previous, new="NAO_APLICAVEL",
+            sistema_cliente=None, referencia_externa=None,
+            motivo=data.motivo, tipo_decisao="ENCERRAR_LOCAL",
+            actor_user_id=actor_user_id, actor_client_id=actor_client_id,
+        )
+    elif data.decision == "MARCAR_CONFLITO":
+        order.reconciliation_status = "CONFLITO"
+        await _record_reconciliation_decision(
+            session, order, previous=previous, new="CONFLITO",
+            sistema_cliente=data.sistema_cliente, referencia_externa=data.referencia_externa,
+            motivo=data.motivo, tipo_decisao="MARCAR_CONFLITO",
+            actor_user_id=actor_user_id, actor_client_id=actor_client_id,
+        )
+    else:
+        if not data.sistema_cliente or not data.tenant_cliente_id or not data.referencia_externa:
+            raise ValueError("sistema_cliente, tenant_cliente_id e referencia_externa são obrigatórios para conciliar")
+        external_data = type("ExternalOrder", (), {
+            "client_system": data.sistema_cliente,
+            "client_tenant_id": data.tenant_cliente_id,
+            "external_reference": data.referencia_externa,
+            "correlation_id": data.correlation_id or order.correlation_id,
+            "subject_type": order.subject_type,
+            "tipo_pesagem": order.tipo_pesagem,
+            "natureza_operacao": order.natureza_operacao,
+            "modalidade": order.modalidade,
+            "origem_operacao": "EXTERNA",
+            "operation_local_id": order.operation_local_id,
+            "contexto": data.contexto,
+        })()
+        order = await _reconcile_local_order(
+            session, tenant_id, external_data,
+            actor_user_id=actor_user_id, actor_client_id=actor_client_id,
+        )
+        if order.reconciliation_status == "CONFLITO":
+            order.reconciliation_status = "CONFLITO"
+    await session.flush()
+    return order
 
 
 async def create_station(session: AsyncSession, tenant_id: uuid.UUID, data) -> Estacao:

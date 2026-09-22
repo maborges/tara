@@ -86,7 +86,7 @@ export default function HomePage() {
             <div className="mx-auto mb-6 flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-tr from-primary to-primary/80 shadow-[0_0_20px_var(--color-primary)] font-bold text-white text-3xl transition-transform hover:scale-105 duration-300">
               T
             </div>
-            <CardTitle className="text-3xl font-bold tracking-tight">Tara Station</CardTitle>
+            <CardTitle className="text-3xl font-bold tracking-tight">Terminal Tara</CardTitle>
             <CardDescription className="text-base mt-2 text-foreground/70">
               Insira o código de ativação gerado no painel administrativo para configurar este terminal.
             </CardDescription>
@@ -121,7 +121,7 @@ export default function HomePage() {
             )}
             <Button
               type="submit"
-              className="w-full h-14 text-lg font-bold shadow-lg hover:shadow-primary/25 transition-all active:scale-[0.98] bg-gradient-to-r from-primary to-primary/80 hover:to-primary mt-4"
+              className="w-full h-12 text-lg font-bold shadow-xl hover:shadow-primary/40 hover:-translate-y-1 transition-all active:scale-[0.98] bg-gradient-to-r from-primary to-primary/90 mt-4"
               disabled={carregando}
             >
               {carregando ? "Ativando..." : "Ativar Estação"}

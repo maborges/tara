@@ -162,10 +162,12 @@ export default function ConfiguracoesPage() {
               {resultadoTeste && <p className="text-sm font-medium text-green-600">{resultadoTeste}</p>}
               {sucesso && <p className="text-sm font-medium text-green-600">Configuração salva com sucesso!</p>}
 
-              <Button type="button" variant="outline" className="w-full" onClick={() => void testarBridge()} disabled={salvando}>Testar comunicação</Button>
-              <Button type="submit" className="w-full" disabled={salvando}>
-                {salvando ? "Salvando..." : "Salvar"}
-              </Button>
+              <div className="pt-2 space-y-3">
+                <Button type="button" variant="outline" className="w-full h-12 font-bold border-2 hover:border-primary/50 transition-colors" onClick={() => void testarBridge()} disabled={salvando}>Testar comunicação</Button>
+                <Button type="submit" className="w-full h-12 text-lg font-bold shadow-xl hover:shadow-primary/40 hover:-translate-y-1 transition-all active:scale-[0.98] bg-gradient-to-r from-primary to-primary/90" disabled={salvando}>
+                  {salvando ? "Salvando..." : "Salvar"}
+                </Button>
+              </div>
             </CardContent>
           </form>
         </Card>

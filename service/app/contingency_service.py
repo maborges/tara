@@ -100,14 +100,15 @@ async def _import_item(session, tenant_id, lot_id, station_id, record):
         return _save_item(session, tenant_id, lot_id, record, "DUPLICADO", duplicate.id)
     try:
         order_id = record.ordem_id or await _create_shadow_order(session, tenant_id, record)
-        weight = await complete_weighing(session, tenant_id, WeighingIn(estacao_id=station_id, installation_id=record.installation_id, device_configuration_id=record.device_configuration_id, ordem_id=order_id, local_id=record.local_id, etapa=record.etapa, peso_aferido_kg=Decimal(record.peso_aferido_kg), peso_informado_kg=_decimal(record.peso_informado_kg), peso_tara_kg=_decimal(record.peso_tara_kg), captured_via=record.captured_via, leitura_bruta=record.leitura_bruta, captured_at=_naive_datetime(record.data_pesagem), direcao_veiculo=record.direcao_veiculo, finalidade=record.finalidade, metodo_medicao=record.metodo_medicao))
+        weight = await complete_weighing(session, tenant_id, WeighingIn(estacao_id=station_id, installation_id=record.installation_id, device_configuration_id=record.device_configuration_id, ordem_id=order_id, local_id=record.local_id, etapa=record.etapa, peso_aferido_kg=Decimal(record.peso_aferido_kg), peso_informado_kg=_decimal(record.peso_informado_kg), peso_tara_kg=_decimal(record.peso_tara_kg), captured_via=record.captured_via, leitura_bruta=record.leitura_bruta, captured_at=_naive_datetime(record.data_pesagem), direcao_veiculo=record.direcao_veiculo, finalidade=record.finalidade, metodo_medicao=record.metodo_medicao, contexto=record.contexto))
         return _save_item(session, tenant_id, lot_id, record, "IMPORTADO", weight.id)
     except (ValueError, KeyError) as exc:
         return _save_item(session, tenant_id, lot_id, record, "REJEITADO", None, str(exc))
 
 
 async def _create_shadow_order(session, tenant_id, record):
-    data = type("ContingencyOrder", (), {"client_system": "balanca-contingencia", "client_tenant_id": str(tenant_id), "external_reference": record.numero_ticket or record.local_id, "correlation_id": record.local_id, "subject_type": record.subject_type or "VEICULO", "tipo_pesagem": record.tipo_pesagem or "UNICA", "natureza_operacao": record.natureza_operacao, "modalidade": record.modalidade, "contexto": record.contexto or {}, "operation_local_id": record.operation_local_id})()
+    origin = record.origem_operacao or ("LOCAL" if record.operation_local_id else "EXTERNA")
+    data = type("ContingencyOrder", (), {"client_system": "balanca-contingencia", "client_tenant_id": str(tenant_id), "external_reference": record.numero_ticket if origin == "EXTERNA" else None, "correlation_id": record.local_id, "subject_type": record.subject_type or "VEICULO", "tipo_pesagem": record.tipo_pesagem or "UNICA", "natureza_operacao": record.natureza_operacao, "modalidade": record.modalidade, "origem_operacao": origin, "contexto": record.contexto or {}, "operation_local_id": record.operation_local_id})()
     return (await create_order(session, tenant_id, data)).id
 
 

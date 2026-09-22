@@ -58,6 +58,8 @@ export async function pullSync(): Promise<{ ok: boolean; error?: string }> {
         const mappedOperations = await db.operacoes.where("ordem_id").equals(ordem.id).toArray();
         for (const operacao of mappedOperations) {
           await db.operacoes.update(operacao.operation_local_id, {
+            origem_operacao: ordem.origem_operacao ?? operacao.origem_operacao,
+            estado_reconciliacao: ordem.reconciliation_status ?? operacao.estado_reconciliacao,
             natureza_operacao: ordem.natureza_operacao,
             modalidade: ordem.modalidade,
             peso_bruto_kg: ordem.peso_bruto_kg,

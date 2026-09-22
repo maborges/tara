@@ -34,7 +34,10 @@ export interface OrdemPendenteLocal {
   id: string; // UUID do servidor
   origem_tipo: string;
   origem_id: string | null;
-  referencia_externa: string;
+  referencia_externa: string | null;
+  operation_local_id?: string | null;
+  origem_operacao?: "EXTERNA" | "LOCAL" | null;
+  reconciliation_status?: "NAO_APLICAVEL" | "PENDENTE" | "CONCILIADA" | "CONFLITO" | null;
   subject_type: "VEICULO" | "ANIMAL";
   tipo_pesagem: TipoPesagem;
   natureza_operacao?: NaturezaOperacao | null;
@@ -122,11 +125,13 @@ export interface OperacaoLocal {
   status_local: OperacaoLocalStatus;
   reconciliation_status: "PENDENTE" | "MAPEADA" | "PENDENTE_RECONCILIACAO";
   subject_type: "VEICULO";
+  origem_operacao: "EXTERNA" | "LOCAL";
+  estado_reconciliacao: "NAO_APLICAVEL" | "PENDENTE" | "CONCILIADA" | "CONFLITO";
   tipo_pesagem: TipoPesagem;
   natureza_operacao?: NaturezaOperacao | null;
   modalidade?: Modalidade | null;
-  processo: { tipo: string; referencia: string };
-  referencia_externa: string;
+  processo: { tipo: string; referencia?: string | null };
+  referencia_externa: string | null;
   correlation_id: string;
   contexto: Record<string, unknown>;
   etapas_realizadas: Etapa[];
@@ -264,6 +269,12 @@ class BalancaDB extends Dexie {
     // fields. Keeping the same indexes makes this an additive upgrade without
     // rewriting or clearing existing queued records.
     this.version(10).stores({
+      operacoes: "operation_local_id, ordem_id, status_local, reconciliation_status, referencia_externa",
+      pesagens: "local_id, operation_local_id, ordem_id, server_id, synced, installation_id",
+    });
+    this.version(11).stores({
+      // Origin, reconciliation state and cargo context are object fields;
+      // indexes and pending records remain untouched.
       operacoes: "operation_local_id, ordem_id, status_local, reconciliation_status, referencia_externa",
       pesagens: "local_id, operation_local_id, ordem_id, server_id, synced, installation_id",
     });

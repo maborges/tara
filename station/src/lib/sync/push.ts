@@ -8,6 +8,7 @@ interface SyncPushItemResult {
   error_message?: string | null;
   operation_local_id?: string | null;
   ordem_id?: string | null;
+  reconciliation_status?: "NAO_APLICAVEL" | "PENDENTE" | "CONCILIADA" | "CONFLITO" | null;
 }
 
 interface SyncPushResponse {
@@ -71,12 +72,13 @@ export async function pushSync(): Promise<{ ok: boolean; sincronizados: number; 
               operacao: operacao
                 ? {
                     operation_local_id: operacao.operation_local_id,
+                    origem_operacao: operacao.origem_operacao,
                     subject_type: operacao.subject_type,
                     tipo_pesagem: operacao.tipo_pesagem,
                     natureza_operacao: operacao.natureza_operacao,
                     modalidade: operacao.modalidade,
                     processo: operacao.processo,
-                    referencia_externa: operacao.referencia_externa,
+                    referencia_externa: operacao.referencia_externa ?? null,
                     correlation_id: operacao.correlation_id,
                     veiculo: (operacao.contexto.veiculo as Record<string, unknown>) ?? {},
                     motorista: (operacao.contexto.motorista as Record<string, unknown>) ?? {},
@@ -114,6 +116,7 @@ export async function pushSync(): Promise<{ ok: boolean; sincronizados: number; 
             await db.operacoes.update(result.operation_local_id, {
               ordem_id: result.ordem_id,
               reconciliation_status: "MAPEADA",
+              estado_reconciliacao: result.reconciliation_status ?? operacao.estado_reconciliacao,
               status_local: operacao.tipo_pesagem === "UNICA" ? "CONCLUIDA" : "EM_PESAGEM",
               updated_at: new Date().toISOString(),
             });
@@ -129,6 +132,7 @@ export async function pushSync(): Promise<{ ok: boolean; sincronizados: number; 
           await db.operacoes.update(result.operation_local_id, {
             status_local: "PENDENTE_RECONCILIACAO",
             reconciliation_status: "PENDENTE_RECONCILIACAO",
+            estado_reconciliacao: "CONFLITO",
             updated_at: new Date().toISOString(),
           });
         }
