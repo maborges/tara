@@ -8,7 +8,7 @@ from ..config import get_settings
 from ..db import get_session
 from ..models import ApiClient, Cliente, Conta, Estacao, EstacaoOperador, Operador, Ordem, Outbox, Pesagem, PortalUser
 from ..schemas import (
-    ApiClientConfigurationOut, ApiClientCredentialOut, ApiClientIn, ApiClientListOut, ApiClientStatusOut, ApiClientSystemOut,
+    ApiClientConfigurationOut, ApiClientCredentialOut, ApiClientIn, ApiClientListOut, ApiClientStatusOut, ApiClientSystemOut, ApiClientUpdateIn,
     LoginIn, PortalActionOut, PortalEmailTokenIn, PortalForgotPasswordIn,
     PortalLoginOut, PortalMeOut, PortalResetTokenOut,
     PortalPasswordResetIn, PortalRegisterIn, PortalRegisterOut, PortalAccountUpdateIn, AccountDashboardOut, PlatformSecuritySettingsOut,
@@ -22,7 +22,7 @@ from ..platform_identity import (
     update_portal_account, load_security_settings,
     verify_portal_password_reset_token,
 )
-from ..platform_identity import create_api_client, encrypt_platform_secret, revoke_api_client, rotate_api_client
+from ..platform_identity import create_api_client, encrypt_platform_secret, revoke_api_client, rotate_api_client, update_api_client
 from ..operation import create_operator, create_station, update_operator_status, reset_operator_pin, update_station_status
 from ..auth import new_activation_code, new_token, station_token_hash
 from ..models import WebhookDestination
@@ -477,6 +477,24 @@ async def post_rotate(client_id: str, context=Depends(require_portal_admin())):
     return ApiClientCredentialOut(
         client_id=client.client_id, client_secret=secret, nome=client.nome,
         scopes=client.scopes, expires_at=client.expires_at,
+    )
+
+
+@router.put("/api-clients/{client_id}", response_model=ApiClientStatusOut)
+async def put_api_client(client_id: str, data: ApiClientUpdateIn, context=Depends(require_portal_admin())):
+    tenant_id, session, _user = context
+    try:
+        client = await update_api_client(
+            session, tenant_id, client_id, data.nome, data.scopes, data.expires_at
+        )
+    except ValueError as exc:
+        await session.rollback()
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    await session.commit()
+    return ApiClientStatusOut(
+        client_id=client.client_id, nome=client.nome, scopes=client.scopes,
+        status=client.status, expires_at=client.expires_at,
+        created_at=client.created_at, last_used_at=client.last_used_at,
     )
 
 

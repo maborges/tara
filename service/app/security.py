@@ -37,6 +37,8 @@ INTEGRATION_SCOPES = {
     "weighings:reconcile",
     "events:read",
     "stations:activate",
+    "operators:read",
+    "operators:write",
     "webhooks:read",
     "webhooks:manage",
     "webhooks:replay",

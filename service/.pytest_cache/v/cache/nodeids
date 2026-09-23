@@ -15,6 +15,7 @@
   "tests/test_delivery_receipt_e2e.py::test_delivery_pull_and_ack_lifecycle",
   "tests/test_outbox_delivery.py::test_file_adapter_is_hidden_behind_outbox_delivery",
   "tests/test_platform_accounts.py::test_platform_admin_lists_accounts_across_tenants",
+  "tests/test_portal_contract.py::test_api_client_configuration_serializes_cliente_orm_attributes",
   "tests/test_portal_contract.py::test_portal_registration_requires_account_owner_credentials",
   "tests/test_portal_contract.py::test_portal_routes_are_versioned_and_isolated_from_backoffice",
   "tests/test_service_e2e.py::test_standalone_service_order_station_weighing_observer_flow",

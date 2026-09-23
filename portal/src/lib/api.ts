@@ -142,6 +142,10 @@ export async function createApiClient(session: Session, payload: { nome: string;
   return apiFetch<NewCredential>("/v1/portal/api-clients", session, { method: "POST", body: JSON.stringify(payload) });
 }
 
+export async function updateApiClient(session: Session, clientId: string, payload: { nome: string; scopes: string[]; expires_at: string | null }) {
+  return apiFetch<ApiClient>(`/v1/portal/api-clients/${encodeURIComponent(clientId)}`, session, { method: "PUT", body: JSON.stringify(payload) });
+}
+
 export async function rotateApiClient(session: Session, clientId: string) {
   return apiFetch<NewCredential>(`/v1/portal/api-clients/${encodeURIComponent(clientId)}/rotate`, session, { method: "POST" });
 }

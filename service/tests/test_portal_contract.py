@@ -4,7 +4,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from app.main import app
-from app.schemas import PortalRegisterIn
+from app.schemas import ApiClientSystemOut, PortalRegisterIn
 
 
 def test_portal_routes_are_versioned_and_isolated_from_backoffice():
@@ -12,6 +12,7 @@ def test_portal_routes_are_versioned_and_isolated_from_backoffice():
     assert "/v1/portal/auth/register" in paths
     assert "/v1/portal/auth/login" in paths
     assert "/v1/portal/api-clients" in paths
+    assert "/v1/portal/api-clients/{client_id}" in paths
     assert "/v1/portal/stations" in paths
     assert "/v1/portal/stations/{station_id}/status" in paths
     assert "/v1/portal/operators" in paths
@@ -31,3 +32,17 @@ def test_portal_registration_requires_account_owner_credentials():
     )
     assert data.email == "admin@example.com"
     assert len(data.password) >= 8
+
+
+def test_api_client_configuration_serializes_cliente_orm_attributes():
+    class ClienteStub:
+        sistema_cliente = "deepfarms"
+        tenant_cliente_id = "tenant-1"
+        nome_exibicao = "DeepFarms"
+        status = "ATIVO"
+
+    result = ApiClientSystemOut.model_validate(ClienteStub())
+    assert result.sistema_cliente == "deepfarms"
+    assert result.tenant_cliente_id == "tenant-1"
+    assert result.nome_exibicao == "DeepFarms"
+    assert result.status == "ATIVO"

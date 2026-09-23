@@ -711,6 +711,49 @@ async def post_operator(
     return operator
 
 
+@router.post("/client/operators", response_model=OperatorOut, status_code=201)
+async def post_client_operator(
+    data: OperatorIn,
+    context=Depends(require_client_scope("operators:write")),
+):
+    """Projeta um operador do sistema cliente usando Client ID/Secret."""
+    tenant_id, session, _client = context
+    try:
+        operator = await create_operator(session, tenant_id, data)
+    except ValueError as exc:
+        await session.rollback()
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    await session.commit()
+    return operator
+
+
+@router.get("/client/operators", response_model=list[OperatorOut])
+async def get_client_operators(context=Depends(require_client_scope("operators:read"))):
+    """Consulta operadores disponíveis para um sistema cliente."""
+    tenant_id, session, _client = context
+    result = await session.execute(
+        select(Operador).where(Operador.tenant_id == tenant_id, Operador.status == "ATIVO")
+    )
+    return list(result.scalars())
+
+
+@router.post("/client/operators/{operator_id}/revoke", response_model=OperatorOut)
+async def post_client_revoke_operator(
+    operator_id: uuid.UUID,
+    context=Depends(require_client_scope("operators:write")),
+):
+    """Revoga a projeção de operador solicitada pelo sistema cliente."""
+    tenant_id, session, _client = context
+    operator = (await session.execute(
+        select(Operador).where(Operador.id == operator_id, Operador.tenant_id == tenant_id)
+    )).scalar_one_or_none()
+    if operator is None:
+        raise HTTPException(status_code=404, detail="Operador não encontrado")
+    operator.status = "REVOGADO"
+    await session.commit()
+    return operator
+
+
 @router.get("/operators", response_model=list[OperatorOut])
 async def get_operators(context=Depends(require_backoffice("backoffice:operadores:gerenciar"))):
     tenant_id, session, _user = context

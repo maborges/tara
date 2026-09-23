@@ -3,7 +3,7 @@ from decimal import Decimal
 from typing import Any, Literal
 import uuid
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field, field_validator
 
 
 class ClientIn(BaseModel):
@@ -311,6 +311,7 @@ class ApiClientListOut(ApiClientStatusOut):
 
 
 class ApiClientSystemOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
     sistema_cliente: str
     tenant_cliente_id: str
     nome_exibicao: str
@@ -571,6 +572,8 @@ class WeighingOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: uuid.UUID
     estacao_id: uuid.UUID | None
+    installation_id: uuid.UUID | None = Field(default=None, validation_alias=AliasChoices("installation_id", "instalacao_id"))
+    device_configuration_id: uuid.UUID | None = None
     ordem_id: uuid.UUID | None
     local_id: str
     etapa: str
@@ -578,8 +581,10 @@ class WeighingOut(BaseModel):
     peso_informado_kg: Decimal | None
     peso_tara_kg: Decimal | None
     captured_via: str
+    operador_id: uuid.UUID | None = None
     captured_at: datetime
     reconciliation_status: str
+    leitura_bruta: dict[str, Any] | None = None
     direcao_veiculo: str | None
     natureza_mercadoria: str | None
     tipo_operacao: str | None
