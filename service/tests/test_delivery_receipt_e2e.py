@@ -4,7 +4,7 @@ import os
 import sys
 from pathlib import Path
 
-os.environ.setdefault("TARA_DATABASE_URL", "postgresql+asyncpg://borgus:numsey01@192.168.0.3/farms")
+os.environ.setdefault("TARA_DATABASE_URL", "postgresql+asyncpg://borgus:numsey01@192.168.0.2/farms")
 os.environ.setdefault("TARA_API_KEY", "service-test")
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 

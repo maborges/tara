@@ -298,7 +298,7 @@ Aplicação:
 
 ```bash
 cd /opt/lampp/htdocs/tara/service
-psql -h 192.168.0.3 -U borgus -W -d farms \
+psql -h 192.168.0.2 -U borgus -W -d farms \
   -v ON_ERROR_STOP=1 -f migrations/005_customer_portal.sql
 ```
 
