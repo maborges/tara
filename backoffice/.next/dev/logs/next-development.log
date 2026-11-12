@@ -1,4 +1,4 @@
-{"timestamp":"00:00:01.727","source":"Server","level":"LOG","message":"- Experiments (use with caution):"}
-{"timestamp":"00:00:01.728","source":"Server","level":"LOG","message":"  ⨯ useTypeScriptCli"}
-{"timestamp":"00:00:01.728","source":"Server","level":"LOG","message":""}
-{"timestamp":"07:12:25.333","source":"Server","level":"LOG","message":"○ Compiling /_not-found ..."}
+{"timestamp":"00:00:01.969","source":"Server","level":"LOG","message":"- Experiments (use with caution):"}
+{"timestamp":"00:00:01.970","source":"Server","level":"LOG","message":"  ⨯ useTypeScriptCli"}
+{"timestamp":"00:00:01.970","source":"Server","level":"LOG","message":""}
+{"timestamp":"00:00:17.555","source":"Server","level":"LOG","message":"○ Compiling / ..."}
